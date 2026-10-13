@@ -24,6 +24,7 @@ Each entry follows the same template (see the end of this file).
 - [Step 4: Game screens (web UI)](#step-4-game-screens-web-ui)
 - [Step 5: Docker, CI/CD and deployment](#step-5-docker-cicd-and-deployment)
 - [Step 6: Chart cards](#step-6-chart-cards)
+- [Step 7: The explainer](#step-7-the-explainer)
 
 ---
 
@@ -1034,7 +1035,7 @@ previous version was recorded for rollback.
 
 ## Step 6: Chart cards
 
-**Date:** 2026-10-14 · **Branch:** `feature/chart-cards`
+**Date:** 2026-10-14 · **Branch:** `feature/chart-cards` · **PR:** [#8](https://github.com/ash-1202/daily-loop/pull/8)
 
 ### Goal
 
@@ -1154,6 +1155,60 @@ but the repo is public and Yahoo's terms limit redistribution. The fixtures gene
 
 After merging: install the updated deploy script and the 18:30 IST cron on the server (infrastructure
 files are applied by hand, see `deploy/README.md`), then email OTP login and the explainer.
+
+**Result ([PR #8](https://github.com/ash-1202/daily-loop/pull/8)):** the PR was merged and auto-deployed
+(`d0999724`) three minutes *before* the updated deploy script was installed, so that deploy didn't run
+the generator. Lesson: when a change needs both new code and a server-side script, install the script
+**before** merging. Fixed by installing the script and the cron, then running the job once by hand:
+6 chart cards and challenges for 15–20 Oct in 1.2 s (today's challenge already existed, so its slot 5
+stayed a market word). From now on every deploy and every evening at 18:30 IST keep 7 days filled.
+
+---
+
+## Step 7: The explainer
+
+**Date:** 2026-10-14 · **Branch:** `docs/explainer`
+
+### Goal
+
+Kenpath asked for an explainer covering *what you built, the choices you made, and what you left out*,
+plus where AI tools were used, and said it counts as much as the app. A reviewer should get the
+picture in under a minute and be able to dig in from there.
+
+### What was built
+
+```
+EXPLAINER.md            # the explainer: 30-second summary, then what / why / choices / left out / AI / where to look
+docs/screenshots/*.jpg  # 5 phone screenshots of the real app (444 KB total)
+README.md               # "Start here" link to the explainer at the top
+```
+
+### How it was made
+
+- **Screenshots from a fresh guest.** Opening the dev server as `http://[::1]:5173` instead of
+  `localhost` gives the browser a separate cookie and storage space, so the session starts from zero
+  without clearing anything. Captured at phone size (375 × 812, 2× resolution) in light mode: a card,
+  a wrong answer with "Why?", a scam with warning signs, a chart card, and the Done screen.
+- **Written for a reviewer in a hurry:** a 30-second summary box first, then short sections with tables,
+  and links into the README, brainstorm and build log instead of repeating them.
+- **Every number checked** against the real system before writing it (bundle 81 KB, 81 tests, ~2 minutes
+  from merge to live). Two drafts were wrong (82 KB, "5 commands") and were corrected.
+- **Honest about AI and gaps:** which decisions were mine and what Claude wrote; what isn't built
+  (email login, offline mode, Hindi, reminders, rate limiting) and why it matters, especially that guest
+  accounts can be multiplied until login exists.
+
+### Concepts to learn from this step
+
+| Concept | In one line |
+|---|---|
+| Write for the reader's time | Summary first; details for those who want them |
+| Show, don't tell | Five screenshots explain the product faster than paragraphs |
+| Link, don't duplicate | One source of truth per topic (README, brainstorm, build log) |
+| Say what's missing | Listing gaps and their risks shows judgment, not weakness |
+
+### What's next
+
+Clean the test data from production before sharing the link, then email OTP login if time allows.
 
 ---
 

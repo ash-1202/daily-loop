@@ -488,3 +488,5 @@ Keep this updated for the explainer.
   local droplet simulation, set up the server with the user's approval, and diagnosed the first deploy failure.
 - 2026-10-14: Claude built the chart cards: Yahoo provider, chart rules, generation job, SVG chart, tests
   (synthetic data), and the cron/deploy integration.
+- 2026-10-14: Claude drafted EXPLAINER.md (in the user's voice, for the user to review) and captured
+  the screenshots from the running app.

@@ -4,8 +4,10 @@ A lightweight, mobile-first web app built around a short daily task with streaks
 
 > **Live:** **https://daily5.tradertrix.com** (open it on a phone). Deployed automatically on every merge to `main`.
 >
-> **Status:** playable end to end: guest start, 5 daily cards, points, streaks, badges and a weekly
-> leaderboard. Email login and the explainer come next.
+> **Start here: [EXPLAINER.md](EXPLAINER.md)**: what I built, the choices I made, what I left out, and how AI was used.
+>
+> **Status:** playable end to end: guest start, 5 daily cards (including real chart cards), points,
+> streaks, badges and a weekly leaderboard. Email login is designed but not built yet.
 >
 > - **Why** things are built this way: [docs/brainstorm.md](docs/brainstorm.md) (decisions and reasoning)
 > - **How** the code was built, step by step: [docs/BUILD_LOG.md](docs/BUILD_LOG.md) (learning journal)
