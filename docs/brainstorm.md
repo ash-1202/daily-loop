@@ -103,13 +103,46 @@ with stock names removed.
 | Leaderboard | Displays it | Aggregates it (cached) |
 | Offline | Queues submissions, retries | Idempotent, so retries never double-pay |
 
-### Stack (proposed)
+### Stack (decided 2026-10-13)
 
-- **Frontend:** Preact or React + Vite, PWA (service worker), TypeScript.
-- **Backend:** Node + Fastify or Hono, TypeScript (types shared via `packages/shared`).
-  FastAPI is the alternative if we prefer Python.
+- **Frontend:** React + Vite, PWA (service worker), TypeScript.
+- **Backend:** Node.js + Fastify, TypeScript (types shared via `packages/shared`).
 - **Database:** Postgres on a free tier (Neon or Supabase).
 - **Hosting:** web on Cloudflare Pages or Vercel; API on Render or Fly.io.
+
+### Why Node.js (and not Java) for the backend
+
+Java (Spring Boot) was considered with future scale in mind. At this app's likely scale, the
+language is not the limit; the architecture is. The workload is I/O-bound (small JSON reads and
+writes against Postgres), which Node handles very well.
+
+| | Node.js + TypeScript | Java (Spring Boot) |
+|---|---|---|
+| Fits the 4 to 6 hour budget | ✅ Little boilerplate | ⚠️ More setup and ceremony |
+| Shared types with the frontend | ✅ One `packages/shared` | ❌ Duplicated or generated |
+| Free tier (512 MB, sleeps when idle) | ✅ ~50 to 100 MB, ~1 s cold start | ⚠️ ~300 to 500 MB, 5 to 15 s cold start |
+| First load when opened on a phone | ✅ Fast, even after sleeping | ❌ Risk of a blank screen |
+| Heavy CPU work at very large scale | OK | ✅ Stronger |
+
+### How it scales later
+
+1. **Stateless API:** run more instances behind a load balancer.
+2. **Postgres:** connection pooling, then read replicas.
+3. **Leaderboard:** move to Redis sorted sets when queries get heavy.
+4. **Background work** (badge checks, generating each day's challenge): move to a job queue.
+5. **CPU-heavy services** (e.g. analytics): split out just that service, in Java or Go if needed.
+
+### Why React (and the path to a React Native app)
+
+React was chosen over Preact so that a future **React Native** mobile app can share as much as possible.
+
+- React Native **cannot reuse web screens** (`<div>` vs `<View>`), so UI would be rewritten.
+- What **can** be shared is everything that is not UI: types, validation schemas, the API client,
+  hooks, and reward/streak display logic.
+- So from day one, non-UI code lives in `packages/shared`, and `apps/web` contains only screens.
+  A future `apps/mobile` (Expo / React Native) then only needs its own screens.
+- Cost: React adds ~45 KB gzipped vs ~4 KB for Preact. This still fits the ~150 KB budget.
+- Not chosen: sharing screens via react-native-web, because it makes the web bundle heavier on low-end phones.
 
 ### Repository layout
 
@@ -119,7 +152,7 @@ daily-loop/
 │   ├── web/          # frontend (PWA)
 │   └── api/          # backend (REST API)
 ├── packages/
-│   └── shared/       # shared types + validation schemas
+│   └── shared/       # types, schemas, API client, hooks (no UI; reusable by React Native)
 ├── datasets/         # versioned content (JSON/CSV)
 ├── db/
 │   ├── migrations/   # SQL migrations
@@ -182,7 +215,7 @@ GET  /api/leaderboard?week=  -> top N + my rank
 1. ~~What is the daily task?~~ Decided: Market Daily 5 (see 1a).
 2. **Login:** anonymous device token only, or optional name/phone?
 3. ~~Which motivators?~~ Decided: points, streak + freeze, 3 badges, weekly leaderboard; no levels.
-4. **Backend language:** TypeScript (shared types) or Python (FastAPI)?
+4. ~~Backend language?~~ Decided: Node.js + TypeScript (Fastify). Frontend: React.
 5. **Chart data source:** historical candle snapshots from earlier projects, or a small hand-made set?
 6. **How are the daily 5 picked?** Pre-generated `daily_challenges` rows, or chosen on the fly with a date-based seed?
 
@@ -197,6 +230,8 @@ GET  /api/leaderboard?week=  -> top N + my rank
 | 2026-10-13 | Daily challenge = Market Daily 5 (2 term, 2 scam, 1 chart) | Useful financial literacy for first-time investors; dataset-driven; small scope |
 | 2026-10-13 | Reward correct knowledge answers only, never price predictions | Avoids betting/gaming-law and stock-tip concerns |
 | 2026-10-13 | Motivators: points, streak + weekly freeze, 3 badges, weekly leaderboard; no levels | Enough to bring people back without bloating scope |
+| 2026-10-13 | Backend: Node.js + TypeScript + Fastify (Java considered) | I/O-bound workload, shared types, fast cold starts on free tiers; scales via architecture |
+| 2026-10-13 | Frontend: React (Preact considered) | Keeps a path to a React Native app; non-UI code in `packages/shared` |
 
 ---
 
@@ -206,3 +241,4 @@ Keep this updated for the explainer.
 
 - 2026-10-13: Claude helped draft this brainstorm document and the initial repository layout.
 - 2026-10-13: Claude helped brainstorm trading-themed challenge ideas and the Market Daily 5 design.
+- 2026-10-13: Claude helped compare Node.js vs Java and React vs Preact for the stack decision.

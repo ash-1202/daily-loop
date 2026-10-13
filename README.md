@@ -70,14 +70,27 @@ flowchart LR
 | Leaderboard | Displays it | Aggregates it (cached) |
 | Offline | Queues submissions, retries later | Idempotent, so retries never pay twice |
 
-### Proposed stack
+### Stack
 
 | Layer | Choice | Why |
 |---|---|---|
-| Frontend | Preact or React + Vite, PWA, TypeScript | Small bundle, offline support, installable on Android |
-| Backend | Node + Fastify or Hono, TypeScript | Shares types and validation with the frontend |
+| Frontend | React + Vite, PWA, TypeScript | Offline support, installable on Android, and a path to a React Native app |
+| Backend | Node.js + Fastify, TypeScript | I/O-bound workload, shared types with the frontend, fast cold starts on free tiers |
 | Database | Postgres (Neon or Supabase free tier) | Reliable transactions for rewards; free hosting |
 | Hosting | Cloudflare Pages / Vercel (web), Render / Fly.io (API) | Free tiers, simple deploys |
+
+**Why Node.js, not Java?** Java was considered with future scale in mind, but at this app's scale
+the limit is the architecture, not the language. Node handles small JSON reads and writes very well,
+shares types with the frontend, and wakes up in about a second on free hosting (a Java app can take
+5 to 15 seconds, which means a blank screen on a phone).
+
+**How it scales later:** the API is stateless, so we run more instances; Postgres gets connection
+pooling and read replicas; the leaderboard moves to Redis; background work (badges, daily challenge
+generation) moves to a job queue; any CPU-heavy service can be split out on its own.
+
+**Path to a mobile app:** React Native cannot reuse web screens, but it can reuse everything else.
+So all non-UI code (types, validation, API client, hooks) lives in `packages/shared`, and `apps/web`
+holds only screens. A future `apps/mobile` (React Native) only needs its own screens.
 
 ---
 
@@ -145,7 +158,7 @@ daily-loop/
 │   ├── web/          # frontend (PWA)
 │   └── api/          # backend (REST API)
 ├── packages/
-│   └── shared/       # shared types + validation schemas
+│   └── shared/       # types, schemas, API client, hooks (no UI; reusable by React Native)
 ├── datasets/         # versioned content (JSON/CSV)
 ├── db/
 │   ├── migrations/   # SQL migrations
