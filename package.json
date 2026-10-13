@@ -1,0 +1,34 @@
+{
+  "name": "daily-loop",
+  "private": true,
+  "description": "A lightweight, mobile-first daily task app with server-checked streaks, points and badges.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w @daily-loop/api\" \"npm run dev -w @daily-loop/web\"",
+    "build": "npm run build -w @daily-loop/api && npm run build -w @daily-loop/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^9.2.5",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.71.2"
+  }
+}
