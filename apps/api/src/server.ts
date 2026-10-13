@@ -2,7 +2,7 @@ import { config } from './config';
 import { pool } from './db';
 import { buildApp } from './app';
 
-const app = buildApp({ pool, clock: () => new Date() });
+const app = buildApp({ pool, clock: () => new Date(), staticDir: config.STATIC_DIR });
 
 async function shutdown(signal: string) {
   app.log.info(`${signal} received, shutting down`);

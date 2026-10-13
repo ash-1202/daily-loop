@@ -1,0 +1,66 @@
+# Production stack for daily5.tradertrix.com, on a droplet shared with ChaiHouse.
+# Lives at /opt/daily-loop/docker-compose.prod.yml. Run only through deploy-daily-loop.sh.
+#
+# Sharing rules (ChaiHouse is the other product on this server and must not be affected):
+# - Separate compose project ("daily-loop"): its own containers, network and volume.
+# - Memory caps, and oom_score_adj 800 (> ChaiHouse's 500): under memory pressure the kernel
+#   stops daily-loop before ChaiHouse.
+# - Nothing listens on a public port. ChaiHouse's Caddy (ports 80/443) reaches the app over the
+#   "edge" network, using the unique name "daily-loop-app". A service called "app" here would
+#   collide with ChaiHouse's "app" alias on that network and split its traffic.
+
+name: daily-loop
+
+services:
+  daily-loop-app:
+    image: ghcr.io/ash-1202/daily-loop:${IMAGE_TAG:?set IMAGE_TAG to a commit sha}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://daily_loop:${POSTGRES_PASSWORD:?missing in .env}@db:5432/daily_loop
+      NODE_ENV: production
+      TRUST_PROXY: 'true'
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - default
+      - edge
+    # Loopback only: for health checks from the host and SSH tunnels, never from the internet.
+    ports:
+      - '127.0.0.1:3200:3000'
+    mem_limit: 256m
+    oom_score_adj: 800
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: daily_loop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing in .env}
+      POSTGRES_DB: daily_loop
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U daily_loop -d daily_loop']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Only on the private default network: Caddy and ChaiHouse can't reach it.
+    networks:
+      - default
+    mem_limit: 200m
+    oom_score_adj: 800
+    logging: *logging
+
+networks:
+  edge:
+    external: true
+    name: ${EDGE_NETWORK:-chaihouse_default}
+
+volumes:
+  pgdata:

@@ -1,0 +1,15 @@
+# Keep the build context small and free of secrets.
+**/node_modules
+**/dist
+**/.vitest
+**/coverage
+.git
+.github
+.env
+.env.*
+!.env.example
+docs
+deploy
+*.md
+Dockerfile
+.dockerignore

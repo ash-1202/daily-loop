@@ -18,6 +18,14 @@ const envSchema = z.object({
   API_PORT: port.optional(),
   PORT: port.optional(),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  // Production only: folder with the built web app, served by the API so web and /api share one
+  // domain. Unset in development, where Vite serves the web app.
+  STATIC_DIR: z.string().optional(),
+  // Set when running behind a reverse proxy (Caddy), so request IPs and protocol come from it.
+  TRUST_PROXY: z.stringbool().default(false),
+  // The git commit this build came from (set at docker build time); shown by /api/health so a
+  // deploy can confirm the new version is live.
+  APP_VERSION: z.string().default('dev'),
 });
 
 const parsed = envSchema.safeParse(process.env);
