@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { POINTS, type Card, type Reward } from '@daily-loop/shared';
 import { strings } from '../strings';
+import { ChartView } from './ChartView';
 
 interface Props {
   card: Card;
@@ -31,6 +32,11 @@ export function CardView({ card, total, rewards, submitting, isLast, onAnswer, o
           <p className="card__intro">📩 {strings.scamIntro}</p>
           <blockquote className="bubble">{card.prompt}</blockquote>
           <h2 className="card__question">{strings.scamQuestion}</h2>
+        </>
+      ) : card.chart ? (
+        <>
+          <ChartView chart={card.chart} />
+          <h2 className="card__question">{card.prompt}</h2>
         </>
       ) : (
         <h2 className="card__question">

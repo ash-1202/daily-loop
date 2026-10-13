@@ -21,6 +21,9 @@
   --error-text: #b91c1c;
   --bubble: #e0f2fe;
   --dot-todo: #cbd5e1;
+  --candle-up: #15803d;
+  --candle-down: #b91c1c;
+  --chart-grid: #94a3b8;
   --shadow: 0 1px 3px rgb(15 23 42 / 0.08);
 
   color-scheme: light dark;
@@ -53,6 +56,9 @@
     --error-text: #fca5a5;
     --bubble: #0c4a6e;
     --dot-todo: #475569;
+    --candle-up: #4ade80;
+    --candle-down: #f87171;
+    --chart-grid: #64748b;
     --shadow: none;
   }
 }
@@ -346,6 +352,66 @@ button:disabled {
 
 .option--dim {
   opacity: 0.55;
+}
+
+/* ---------- Chart ---------- */
+
+.chart {
+  margin: 0;
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.candle line {
+  stroke-width: 1.2;
+}
+
+.candle rect {
+  stroke-width: 1.2;
+}
+
+/* Rising: hollow. Falling: filled. Readable without colour. */
+.candle--up line,
+.candle--up rect {
+  stroke: var(--candle-up);
+}
+
+.candle--up rect {
+  fill: var(--surface);
+}
+
+.candle--down line,
+.candle--down rect {
+  stroke: var(--candle-down);
+}
+
+.candle--down rect {
+  fill: var(--candle-down);
+}
+
+.chart__highlight {
+  fill: var(--warn-bg);
+}
+
+.chart__start {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.chart__label {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.chart__caption {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 /* ---------- Result ---------- */
