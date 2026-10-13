@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { HealthResponse } from '@daily-loop/shared';
+import { config } from '../config';
 import { isDbUp } from '../lib/db-utils';
 
 export async function healthRoutes(app: FastifyInstance) {
@@ -11,6 +12,7 @@ export async function healthRoutes(app: FastifyInstance) {
       service: 'daily-loop-api',
       db: dbUp ? 'up' : 'down',
       time: app.deps.clock().toISOString(),
+      version: config.APP_VERSION,
     };
   });
 }

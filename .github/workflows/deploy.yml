@@ -1,0 +1,113 @@
+name: Deploy
+
+# Merging to main ships to https://daily5.tradertrix.com:
+#   checks (same as CI) → build image → push to GHCR (tag = commit sha) → deploy over SSH → verify.
+# The server pulls the image; it never builds. A failed deploy rolls back on the server
+# (deploy/deploy-daily-loop.sh) and fails this workflow.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time; a newer merge waits instead of cancelling a deploy halfway through.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+  PUBLIC_URL: https://daily5.tradertrix.com
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    name: Build and push image
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64 # the droplet's architecture
+          push: true
+          build-args: APP_VERSION=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to droplet
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: ${{ env.PUBLIC_URL }}
+    steps:
+      - name: Set up SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host key: the connection fails if the server's identity ever changes.
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy ${{ github.sha }}
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        # The key can only run "deploy <sha>" on the server (forced command); nothing else.
+        #
+        # Internet bots keep many half-open SSH connections to the droplet, and sshd then drops
+        # some new connections at random (MaxStartups). ssh exits with 255 on connection errors,
+        # so those are retried. Retrying is safe: deploying the same sha again changes nothing,
+        # and the server-side lock prevents two deploys from overlapping.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            set +e
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=20 -o ServerAliveInterval=15 \
+              "deploy@${DEPLOY_HOST}" "deploy ${GITHUB_SHA}"
+            status=$?
+            set -e
+            [ "$status" -ne 255 ] && exit "$status"
+            echo "::warning::SSH connection failed (attempt $attempt), retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
+          echo "::error::Could not connect to the droplet over SSH"
+          exit 1
+
+      - name: Verify the public site serves this commit
+        run: |
+          for i in $(seq 1 10); do
+            body=$(curl -fsS --max-time 10 "$PUBLIC_URL/api/health" || true)
+            echo "attempt $i: $body"
+            if echo "$body" | grep -q "\"version\":\"$GITHUB_SHA\""; then
+              curl -fsS -o /dev/null --max-time 10 "$PUBLIC_URL/" && echo "web app OK" && exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::$PUBLIC_URL is not serving $GITHUB_SHA"
+          exit 1

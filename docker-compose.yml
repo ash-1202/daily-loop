@@ -1,5 +1,11 @@
 # Local Postgres for development.
 # Host port 5433 (not 5432) so it does not clash with a Postgres already installed on the machine.
+#
+# The project is named "daily-loop-dev" so it can never be confused with the production project
+# "daily-loop" (deploy/docker-compose.prod.yml): same name + same service "db" = Compose treats
+# them as one and replaces one database container with the other.
+name: daily-loop-dev
+
 services:
   db:
     image: postgres:16-alpine
@@ -19,3 +25,4 @@ services:
 
 volumes:
   db-data:
+    name: daily-loop_db-data # keeps the volume created before the rename, so local data survives

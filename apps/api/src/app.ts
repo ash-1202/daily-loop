@@ -9,6 +9,7 @@ import { meRoutes } from './routes/me';
 import { sessionRoutes } from './routes/session';
 import { submissionRoutes } from './routes/submissions';
 import { todayRoutes } from './routes/today';
+import { setupWebAndNotFound } from './routes/web';
 import { userIdForSession } from './services/sessions';
 
 /** What the app needs from the outside world. Tests pass a test database and a fake clock. */
@@ -16,6 +17,8 @@ export interface AppDeps {
   pool: pg.Pool;
   /** Current time. Every date and timestamp in the app comes from here. */
   clock: () => Date;
+  /** Folder with the built web app to serve (production). Omitted in development and tests. */
+  staticDir?: string;
 }
 
 declare module 'fastify' {
@@ -39,14 +42,17 @@ export function requireUser(req: FastifyRequest): string {
 export function buildApp(deps: AppDeps) {
   const app = Fastify({
     logger: { level: config.NODE_ENV === 'test' ? 'silent' : 'info' },
+    trustProxy: config.TRUST_PROXY,
   });
 
   app.decorate('deps', deps);
   app.decorateRequest('userId', null);
   app.register(cookie);
 
-  // Resolve the session cookie (if any) to a user before every handler.
+  // Resolve the session cookie (if any) to a user before every API handler.
+  // Static files don't need it, so they don't cost a database query.
   app.addHook('preHandler', async (req) => {
+    if (!req.url.startsWith('/api/')) return;
     const token = req.cookies[SESSION_COOKIE];
     req.userId = token ? await userIdForSession(deps.pool, token, deps.clock()) : null;
   });
@@ -75,6 +81,7 @@ export function buildApp(deps: AppDeps) {
   app.register(submissionRoutes);
   app.register(meRoutes);
   app.register(leaderboardRoutes);
+  setupWebAndNotFound(app, deps.staticDir);
 
   return app;
 }
