@@ -351,6 +351,10 @@ POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates 
 | 2026-10-13 | Chart cards generated from Yahoo Finance behind a `MarketDataProvider` interface; no data from other personal projects | Fresh content daily; swappable for a licensed source later |
 | 2026-10-13 | Trigger the job from GitHub Actions cron, not an in-process cron | Free-tier servers sleep; the HTTP call wakes them |
 | 2026-10-13 | Day boundary: midnight IST for challenges, streaks and leaderboard weeks (Mon to Sun) | India-first audience; one clock means challenge and streak never disagree; simpler code and tests |
+| 2026-10-13 | Monorepo with npm workspaces (no Turborepo/Nx); `packages/shared` ships TS source, bundled into the API by tsup | Zero extra tooling; one install and one `npm run dev` |
+| 2026-10-13 | Shared schemas use `zod/mini` | Cut the web bundle from 92 KB to 74 KB gzipped, which matters on low-end phones |
+| 2026-10-13 | API reads `API_PORT` first, then `PORT`; local Postgres on host port 5433 | Avoids clashing with other dev servers and an existing local Postgres; hosts like Render still set `PORT` |
+| 2026-10-13 | Postgres pool has an `error` listener | Without it, a dropped idle connection (DB restart, Neon idle timeout) crashes the API; found while testing |
 
 ---
 
@@ -363,3 +367,5 @@ Keep this updated for the explainer.
 - 2026-10-13: Claude helped compare Node.js vs Java and React vs Preact for the stack decision.
 - 2026-10-13: Claude helped design the guest-first email OTP login and identities schema.
 - 2026-10-13: Claude helped design the daily challenge generation job and rule-based chart cards.
+- 2026-10-13: Claude set up the monorepo (workspaces, TypeScript, ESLint, Prettier, Docker Postgres,
+  Fastify health endpoint, React page) and tested it, including a database restart.

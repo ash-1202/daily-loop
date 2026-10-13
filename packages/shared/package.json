@@ -1,0 +1,16 @@
+{
+  "name": "@daily-loop/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Types, validation schemas and the API client shared by the API, the web app and a future React Native app. No UI code.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}
