@@ -43,6 +43,10 @@ log "deploying $TAG (previous: ${PREVIOUS:-none})"
 compose "$TAG" up -d --wait --remove-orphans daily-loop-db
 compose "$TAG" run --rm --no-deps daily-loop-app node apps/api/dist/migrate.js
 compose "$TAG" run --rm --no-deps daily-loop-app node apps/api/dist/seed.js
+# Chart cards + challenges for the next 7 days. Market data trouble must never block a release:
+# the app builds a missing day on demand (chart slot → a market word).
+compose "$TAG" run --rm --no-deps daily-loop-app node apps/api/dist/generate.js \
+  || log "challenge generation failed (non-fatal)"
 
 # 3. Replace the app container and wait for its Docker healthcheck.
 rollback() {

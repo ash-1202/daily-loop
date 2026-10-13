@@ -7,7 +7,7 @@ Production: **https://daily5.tradertrix.com**, on the DigitalOcean droplet `chai
 merge to main ─► GitHub Actions: checks ─► build image ─► push ghcr.io/ash-1202/daily-loop:<sha>
                                          ─► ssh deploy@droplet "deploy <sha>"   (forced command)
                                                 └─► /usr/local/bin/deploy-daily-loop <sha>
-                                                      pull → migrate → seed → restart app → health
+                                                      pull → migrate → seed → generate → restart app → health
                                                       (fails? → previous version restarted)
                                          ─► check https://daily5.tradertrix.com/api/health = <sha>
 
@@ -23,6 +23,7 @@ Internet ─► ChaiHouse's Caddy (:80/:443, HTTPS) ─► daily-loop-app:3000 �
 | `deploy-daily-loop.sh` | `/usr/local/bin/deploy-daily-loop` | Deploy one commit; automatic rollback |
 | `daily-loop-ssh-gate.sh` | `/usr/local/bin/daily-loop-ssh-gate` | The only command the CI key may run |
 | `backup-daily-loop.sh` | `/opt/daily-loop/backup.sh` | Nightly `pg_dump`, keeps 14 days |
+| `generate-daily-loop.sh` | `/opt/daily-loop/generate.sh` | Daily chart cards + challenges for the next 7 days (log: `generate.log`) |
 | `Caddyfile.daily5` | appended to `/opt/chaihouse/Caddyfile` | HTTPS site block for daily5.tradertrix.com |
 | — | `/opt/daily-loop/.env` | `POSTGRES_PASSWORD=…` (root-only, never in git) |
 | — | `/opt/daily-loop/current_tag`, `previous_tag` | Which commit is live, and the one before |
@@ -75,6 +76,10 @@ docker exec chaihouse-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapt
 # 5. Nightly backup at 03:15 UTC (ChaiHouse's runs at 03:00)
 install -m 700 backup-daily-loop.sh /opt/daily-loop/backup.sh
 ( crontab -l; echo '15 3 * * * /opt/daily-loop/backup.sh' ) | crontab -
+
+# 6. Daily chart cards + challenges at 13:00 UTC = 18:30 IST (after market close)
+install -m 700 generate-daily-loop.sh /opt/daily-loop/generate.sh
+( crontab -l; echo '0 13 * * * /opt/daily-loop/generate.sh' ) | crontab -
 ```
 
 `restrict` turns off port forwarding, agent forwarding, X11 and terminals for that key;
@@ -100,6 +105,7 @@ cat current_tag previous_tag                                  # what's live, wha
 IMAGE_TAG=$(cat current_tag) docker compose -f docker-compose.prod.yml ps
 IMAGE_TAG=$(cat current_tag) docker compose -f docker-compose.prod.yml logs --tail 100 daily-loop-app
 curl -s 127.0.0.1:3200/api/health                              # from the droplet itself
+/opt/daily-loop/generate.sh && tail -8 generate.log             # build the next 7 days now
 
 deploy-daily-loop $(cat previous_tag)                          # manual rollback to the previous version
 ```

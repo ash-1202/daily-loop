@@ -258,6 +258,21 @@ Free-tier servers sleep when idle, so an in-process cron (e.g. `node-cron`) cann
 - The endpoint is protected by a secret header (`X-Job-Secret`) stored as a GitHub Actions secret.
 - At scale this moves to a proper job queue/worker (see "How it scales later").
 
+### What was built (2026-10-14), and what changed from the plan above
+
+| Plan | Built | Why |
+|---|---|---|
+| GitHub Actions cron → `POST /internal/jobs/…` with a secret | **Server cron** (18:30 IST) + **every deploy** run `node dist/generate.js` in the app container | The app moved to an always-on server (2c), so nothing sleeps; no public endpoint or shared secret to protect |
+| `yahoo-finance2` library | Direct `fetch` of Yahoo's chart endpoint, validated with Zod | One endpoint needed; no dependency; full control of timeouts and parsing |
+| `charts_fallback.json` | Not built | The 7-day buffer, reuse of older charts, and the term fallback already guarantee a full day |
+| Patterns: doji / hammer / engulfing / biggest move | **Trend** (up/down/sideways) and **last candle** (green/red/doji), alternating by day | Clear, teachable concepts for beginners; each has an unambiguous rule. Hammer/engulfing can come later |
+| Any chart for any day | The day's own `chart_<date>` card first | Keeps question kinds alternating day by day |
+
+Rules: trend = up > +5%, down < −5%, sideways within ±2% (2–5% skipped as ambiguous); doji = body ≤ 10%
+of the day's range, green/red = body ≥ 50% (in between skipped). Candles with nulls, today's
+unfinished candle, and impossible rows (high below close, etc.) are dropped when parsing. The stock
+symbol and window dates are stored in the task for auditing, never sent to clients.
+
 ---
 
 ## 2c. Deployment (decided 2026-10-14)
@@ -444,6 +459,10 @@ POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates 
 | 2026-10-14 | Unique service names (`daily-loop-app`, `daily-loop-db`) on the shared network | Docker DNS resolved `db` to ChaiHouse's Postgres on the first deploy |
 | 2026-10-14 | Retry SSH on connection errors in the workflow | Bots fill sshd's unauthenticated slots (MaxStartups), so it drops some new connections |
 | 2026-10-14 | Postgres on the droplet (own container + nightly pg_dump), not Neon | Same pattern as ChaiHouse, lowest latency, no extra account |
+| 2026-10-14 | Chart cards: trend + last-candle questions, answers computed from the shown window | Teach chart reading with one clear answer; never reward guessing the future |
+| 2026-10-14 | Daily job via server cron + on deploy, not GitHub Actions | Always-on server; no public job endpoint or secret |
+| 2026-10-14 | Direct Yahoo chart endpoint behind `MarketDataProvider`; synthetic test fixtures | No extra dependency; no third-party market data committed to a public repo |
+| 2026-10-14 | Market-data failure never blocks a deploy or a day | Learning content must always be available; charts are a bonus slot |
 
 ---
 
@@ -467,3 +486,5 @@ Keep this updated for the explainer.
 - 2026-10-14: Claude analysed hosting options and the droplets (read-only first), wrote the Dockerfile,
   production compose, deploy/rollback/backup scripts, SSH gate and CI/CD workflows, tested them in a
   local droplet simulation, set up the server with the user's approval, and diagnosed the first deploy failure.
+- 2026-10-14: Claude built the chart cards: Yahoo provider, chart rules, generation job, SVG chart, tests
+  (synthetic data), and the cron/deploy integration.

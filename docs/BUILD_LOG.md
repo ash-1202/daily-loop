@@ -23,6 +23,7 @@ Each entry follows the same template (see the end of this file).
 - [Step 3: Challenge API](#step-3-challenge-api)
 - [Step 4: Game screens (web UI)](#step-4-game-screens-web-ui)
 - [Step 5: Docker, CI/CD and deployment](#step-5-docker-cicd-and-deployment)
+- [Step 6: Chart cards](#step-6-chart-cards)
 
 ---
 
@@ -855,7 +856,7 @@ while there was time to fix them.)*
 
 ## Step 5: Docker, CI/CD and deployment
 
-**Date:** 2026-10-13 / 14 · **Branches:** `feature/deploy` ([PR #6](https://github.com/ash-1202/daily-loop/pull/6)), `fix/deploy-db-name`
+**Date:** 2026-10-13 / 14 · **Branches:** `feature/deploy` ([PR #6](https://github.com/ash-1202/daily-loop/pull/6)), `fix/deploy-db-name` ([PR #7](https://github.com/ash-1202/daily-loop/pull/7))
 · **Live:** https://daily5.tradertrix.com
 
 ### Goal
@@ -1023,6 +1024,136 @@ prevents overlap. *Lesson: retries need idempotent operations.*
 
 Merge `fix/deploy-db-name`. That merge is the first **fully automatic** deploy (checks → image → SSH →
 health → public URL check). Then: chart cards (Yahoo Finance) and email login.
+
+**Result ([PR #7](https://github.com/ash-1202/daily-loop/pull/7)):** the first fully automatic deploy
+succeeded in about 2 minutes from merge (checks 42 s, Docker build 17 s, push 20 s, deploy + public
+check 33 s). Only the app container was replaced; the database kept running, data survived, and the
+previous version was recorded for rollback.
+
+---
+
+## Step 6: Chart cards
+
+**Date:** 2026-10-14 · **Branch:** `feature/chart-cards`
+
+### Goal
+
+Fill the fifth daily slot with **"Read the chart"** cards built from real, recent NSE prices, every
+day, automatically, while keeping the guardrail: the card teaches how to *read* a chart and never
+rewards guessing what happens next.
+
+### What was built
+
+```
+datasets/chart_universe.json        # 24 NSE large caps (Yahoo symbols); read by the job, not seeded
+packages/shared/src/api.ts          # Card.chart = { candles: [o,h,l,c][], highlightLast }
+apps/api/src/market/
+├── provider.ts                     # MarketDataProvider interface + Candle type
+├── yahoo.ts                        # YahooProvider: fetch + Zod-validated parse
+├── chart-rules.ts                  # pure: rescale, classifyTrend, classifyCandle, buildChartQuestion
+└── generator.ts                    # the daily job: chart cards + 7 days of challenges, logged in job_runs
+apps/api/src/scripts/generate.ts    # npm run challenges:generate / dist/generate.js
+apps/api/src/services/challenges.ts # the day's own chart_<date> first; toCard sends candles only
+apps/web/src/components/ChartView.tsx  # SVG candlestick chart
+deploy/generate-daily-loop.sh       # server cron, 18:30 IST
+deploy/deploy-daily-loop.sh         # + runs the job on every deploy (non-fatal)
+apps/api/test/chart-rules.test.ts, generator.test.ts, market-fixtures.ts
+```
+
+### Commands that were run
+
+```bash
+# Can we get the data, from here and from the droplet?
+curl 'https://query1.finance.yahoo.com/v8/finance/chart/RELIANCE.NS?range=3mo&interval=1d'
+# → 200 from the Mac and from the droplet (0.07 s); today's candle has nulls (market still open)
+
+node -e '…'                       # checked all 24 symbols: 200, ~125 daily candles each
+npm run challenges:generate       # real run against the dev DB: 7 charts + 7 challenges in 1.1 s
+npm test                          # 81 tests
+```
+
+### Key files explained
+
+**`chart-rules.ts`: pure rules with one clear answer**
+
+```
+rescale:        divide by the first close × 100, round to 2 decimals   (hides the real price level)
+trend:          up > +5%, down < −5%, sideways within ±2%, else null    (2–5% is ambiguous)
+last candle:    doji if body ≤ 10% of range, green/red if body ≥ 50%, else null
+```
+
+`null` means "not a good question": the generator tries other 20-day windows (in random order) until
+one gives a clear-cut answer. The rules run on the **rescaled, rounded numbers the user sees**, so the
+answer can always be checked against the chart. The explanation quotes those same numbers.
+
+**`yahoo.ts`: trust nothing from outside.** The JSON is validated with Zod. Rows with a `null`, rows
+that can't be a real candle (high below close, etc.), and **today's candle** (it changes until the
+market closes) are dropped. Timestamps are converted to IST trading dates.
+
+**`generator.ts`: the job.** For each of the next 7 days without a challenge: pick a random symbol
+(at most 5 tries), fetch ~6 months once per symbol per run, store the candles, find a window, insert
+task `chart_<date>`. Then build the 7 days. Each run is a row in `job_runs` (running → succeeded/failed,
+with a JSON report). Errors for one day are recorded and skipped, never fatal.
+
+**Where it runs.** The first plan was a GitHub Actions cron calling a secret-protected endpoint, because
+free hosts sleep. On an always-on server that's needless exposure, so instead: a **server cron** at
+18:30 IST runs `node dist/generate.js` inside the live app container, and **every deploy** runs it too.
+
+**Nothing private reaches the phone.** The task's `payload` holds `ohlc`, `kind` and `meta` (symbol and
+dates, for auditing). `toCard` copies **only** the candles and a highlight flag; a test checks the JSON
+contains no `.NS`, no "meta", no dates and no explanation before answering.
+
+**`ChartView.tsx`: a chart in plain SVG.** No chart library (it adds 1.3 KB gzipped). Rising candles are
+hollow and falling ones filled, the traditional convention, so colour isn't the only signal. A dashed
+line marks the starting level (100); the last candle gets a highlight band for candle questions.
+
+### Concepts to learn from this step
+
+| Concept | In one line |
+|---|---|
+| Provider interface | Code against `MarketDataProvider`, not Yahoo, so the source can be swapped |
+| Validate external data | Parse third-party JSON with a schema; drop rows that can't be true |
+| Ambiguity bands | When an answer would be borderline, skip the example rather than teach something debatable |
+| Rescaling | Same shape, different numbers: hides which stock it is without changing the lesson |
+| Synthetic fixtures | Tests use generated candles; no third-party data committed, fully repeatable |
+| Seeded randomness in tests | Inject `random` so "random" choices are the same on every run |
+| Job audit log | Every background run leaves a row: when, outcome, what it did, what failed |
+| Graceful degradation | Charts are a bonus slot; their failure falls back instead of breaking the day |
+
+### Problems hit and how they were fixed
+
+**1. My own schema rejected my own file.** The first real run failed: `chart_universe.json`'s `name`
+was longer than the 60 characters the shared schema allows. The schema did its job; the name was shortened.
+
+**2. Days weren't getting their own chart.** The builder picked *any* unused chart at random, so the
+"alternate question types by day" plan didn't hold (today got a trend card made for another day). The
+picker now prefers `chart_<date>`, then least recently used. Removing that line on purpose makes the
+generator test fail.
+
+**3. Yahoo's last candle is incomplete during market hours** (seen in the first `curl`: last close
+`null`). The parser drops today's candle even when it has numbers, since they're still changing. A test
+covers it, and removing the rule makes it fail.
+
+**4. Not committing Yahoo data.** It would have been easy to save a real API response as a test fixture,
+but the repo is public and Yahoo's terms limit redistribution. The fixtures generate candles instead.
+
+### How it was verified
+
+| Check | Result |
+|---|---|
+| Yahoo from Mac and droplet | 200; droplet fetch 0.07 s; all 24 symbols ~125 candles |
+| Real job run (dev DB) | 7 chart cards + 7 challenges in 1.1 s; kinds alternate; answers vary (Down, Red, Sideways, Doji…) |
+| Spot-check answers vs data | Trend card: 100 → 91.93 (−8.07%) = "Down"; doji: body 1% of range |
+| Browser, phone size | Chart readable; "Sideways" → "Correct! +10", explanation quotes 100.0 → 101.2 (1.2%) |
+| `npm test` | **81 passed** (+15): rules, parser (nulls, today, impossible rows, URL encoding), job (7 days, idempotent, Yahoo down → terms), no data leak |
+| Deliberately broken code | Removing the "today" filter or the date preference fails the right tests |
+| Docker image | Contains `dist/generate.js` and `chart_universe.json` |
+| Web bundle | 81.5 KB JS gzipped (+1.3 KB for the chart) |
+
+### What's next
+
+After merging: install the updated deploy script and the 18:30 IST cron on the server (infrastructure
+files are applied by hand, see `deploy/README.md`), then email OTP login and the explainer.
 
 ---
 
