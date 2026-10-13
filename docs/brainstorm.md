@@ -163,10 +163,58 @@ daily-loop/
 
 ---
 
+## 2a. Login and authentication
+
+**Decision (2026-10-13):** play as a guest first; verify by **email OTP** to save progress and claim rewards.
+Phone login (SMS / WhatsApp OTP) can be added later without schema changes.
+
+### Flow
+
+```
+Open app → play as guest (device token) → "Save your streak 🔥" → enter email → 6-digit OTP → same account, now verified
+```
+
+### Why guest first
+
+- **Reviewers open the link on a phone first.** An email form plus OTP wait (or OTP in spam) before the
+  first card is a bad first impression. As a guest they answer card 1 within seconds.
+- **Users with limited English** experience the app before facing a form.
+- **Rewards are worth real money**, so a verified email is required **before points can be claimed or
+  redeemed**, and progress survives a phone change.
+
+### Why email OTP now, phone later
+
+- Email OTP is effectively free (e.g. Resend free tier: 3,000 emails/month) and every Android user has a Gmail account.
+- Phone OTP in India needs **DLT registration** for SMS or WhatsApp Business approval, which takes days.
+- No passwords to store, reset or leak.
+
+### Built to add phone login later
+
+- The person (`users`) is separate from how they log in (`identities`). Phone login is a new
+  `type = 'phone'` row; one user can have device, email and phone identities.
+- OTP delivery sits behind one interface, `OtpSender.send(to, code)`:
+  `EmailOtpSender` (Resend) now; `SmsOtpSender` (e.g. MSG91) or `WhatsAppOtpSender` later.
+- Merging: if a guest verifies an email that already belongs to another account, the guest's device
+  is linked to that account (rule to be finalised while building).
+
+### OTP safety rules
+
+- 6 digits, valid for **10 minutes**, **single use**, at most **5 attempts**.
+- Store only a **hash** of the code, never the code itself.
+- **Rate-limit** sends per email and per IP (e.g. 3 per 15 minutes) so nobody can spam an inbox.
+- Session token in an **httpOnly, Secure, SameSite cookie**; only its hash is stored in `sessions`.
+- Local development prints the OTP to the console, so the README setup needs no email account.
+
+---
+
 ## 3. Database design (first draft)
 
 ```
-users            id, display_name, device_token, timezone, created_at
+users            id, display_name, timezone, created_at
+identities       id, user_id, type('device'|'email'|'phone'), value, verified_at
+                 UNIQUE(type, value)
+otp_codes        id, identity_type, value, code_hash, expires_at, attempts, used_at
+sessions         id, user_id, token_hash, expires_at, revoked_at
 datasets         id, name, version, source, content_hash, loaded_at
 tasks            id, dataset_id, type('term'|'scam'|'chart'), prompt, options(jsonb),
                  answer(hidden), explanation, payload(jsonb), difficulty, language, active
@@ -201,7 +249,10 @@ user_badges      user_id, badge_id, awarded_at
 ## 5. API sketch (draft)
 
 ```
-POST /api/session            -> create/restore anonymous user (device token)
+POST /api/session            -> create/restore guest user (device token) -> session cookie
+POST /api/auth/otp/request   -> { email } -> sends a 6-digit OTP (rate-limited)
+POST /api/auth/otp/verify    -> { email, code } -> links email to the current user, verified
+POST /api/auth/logout        -> revokes the session
 GET  /api/today              -> today's challenge (no answers)
 POST /api/submissions        -> { taskId, answer, idempotencyKey } -> result + rewards
 GET  /api/me                 -> points balance, streak, badges
@@ -213,7 +264,7 @@ GET  /api/leaderboard?week=  -> top N + my rank
 ## 6. Open questions
 
 1. ~~What is the daily task?~~ Decided: Market Daily 5 (see 1a).
-2. **Login:** anonymous device token only, or optional name/phone?
+2. ~~Login?~~ Decided: guest first, email OTP to save progress and claim rewards; phone later (see 2a).
 3. ~~Which motivators?~~ Decided: points, streak + freeze, 3 badges, weekly leaderboard; no levels.
 4. ~~Backend language?~~ Decided: Node.js + TypeScript (Fastify). Frontend: React.
 5. **Chart data source:** historical candle snapshots from earlier projects, or a small hand-made set?
@@ -232,6 +283,7 @@ GET  /api/leaderboard?week=  -> top N + my rank
 | 2026-10-13 | Motivators: points, streak + weekly freeze, 3 badges, weekly leaderboard; no levels | Enough to bring people back without bloating scope |
 | 2026-10-13 | Backend: Node.js + TypeScript + Fastify (Java considered) | I/O-bound workload, shared types, fast cold starts on free tiers; scales via architecture |
 | 2026-10-13 | Frontend: React (Preact considered) | Keeps a path to a React Native app; non-UI code in `packages/shared` |
+| 2026-10-13 | Login: guest first, email OTP to verify; `users` separate from `identities` | Zero-friction first use; free OTP delivery; phone login later without schema changes |
 
 ---
 
@@ -242,3 +294,4 @@ Keep this updated for the explainer.
 - 2026-10-13: Claude helped draft this brainstorm document and the initial repository layout.
 - 2026-10-13: Claude helped brainstorm trading-themed challenge ideas and the Market Daily 5 design.
 - 2026-10-13: Claude helped compare Node.js vs Java and React vs Preact for the stack decision.
+- 2026-10-13: Claude helped design the guest-first email OTP login and identities schema.

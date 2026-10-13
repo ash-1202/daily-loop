@@ -94,10 +94,32 @@ holds only screens. A future `apps/mobile` (React Native) only needs its own scr
 
 ---
 
+## Login: guest first, email OTP to save progress
+
+```
+Open app → play as guest → "Save your streak 🔥" → enter email → 6-digit OTP → same account, now verified
+```
+
+- **Play first, log in later.** Anyone opening the link is answering the first card within seconds.
+  A verified email is required **before points can be claimed or redeemed**, and keeps progress safe across phone changes.
+- **Email OTP, no passwords.** It is effectively free and every Android user has a Gmail account.
+  Phone OTP in India needs DLT registration for SMS (or WhatsApp Business approval), so it comes later.
+- **Ready for phone login.** A person (`users`) is separate from how they log in (`identities`: device, email, phone).
+  OTPs are sent through one `OtpSender` interface: email now, SMS or WhatsApp later, with no schema change.
+- **OTP safety:** 6 digits, 10-minute expiry, single use, max 5 attempts, stored only as a hash,
+  rate-limited per email and IP; session in an httpOnly cookie. In local development the OTP is printed
+  to the console, so setup needs no email account.
+
+---
+
 ## Data model (first draft)
 
 ```
-users            id, display_name, device_token, timezone, created_at
+users            id, display_name, timezone, created_at
+identities       id, user_id, type('device'|'email'|'phone'), value, verified_at
+                 UNIQUE(type, value)
+otp_codes        id, identity_type, value, code_hash, expires_at, attempts, used_at
+sessions         id, user_id, token_hash, expires_at, revoked_at
 datasets         id, name, version, source, content_hash, loaded_at
 tasks            id, dataset_id, type('term'|'scam'|'chart'), prompt, options(jsonb),
                  answer(hidden), explanation, payload(jsonb), difficulty, language, active
@@ -141,7 +163,10 @@ Adding new content means editing a dataset file and re-running the seed. No code
 ## API (draft)
 
 ```
-POST /api/session            create or restore an anonymous user (device token)
+POST /api/session            create or restore a guest user (device token) -> session cookie
+POST /api/auth/otp/request   { email } -> sends a 6-digit OTP (rate-limited)
+POST /api/auth/otp/verify    { email, code } -> links the email to the current user
+POST /api/auth/logout        revokes the session
 GET  /api/today              today's challenge (no answers)
 POST /api/submissions        { taskId, answer, idempotencyKey } -> result + rewards
 GET  /api/me                 points balance, streak, badges
