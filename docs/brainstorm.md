@@ -80,13 +80,14 @@ questions correctly, never from guessing where prices will go.
 
 ```
 datasets/
-├── terms.json    # id, question, options[], answer, explanation, icon
-├── scams.json    # id, message, is_scam, red_flags[], explanation
-└── charts.json   # id, ohlc[], pattern, options[], answer, explanation   (stock name hidden)
+├── terms.json           # id, question, options[], answer, explanation, icon
+├── scams.json           # id, message, is_scam, red_flags[], explanation
+├── chart_universe.json  # symbols the chart generator may use (e.g. NIFTY 50 tickers)
+└── charts_fallback.json # a few hand-made chart cards, used only if market data is unavailable
 ```
 
-Chart data can come from historical candle snapshots (e.g. from earlier trading projects),
-with stock names removed.
+`term` and `scam` cards are hand-written. `chart` cards are **generated every day by a backend
+service** from Yahoo Finance data (see 2b). No data from any other personal project is used.
 
 ---
 
@@ -207,6 +208,57 @@ Open app → play as guest (device token) → "Save your streak 🔥" → enter 
 
 ---
 
+## 2b. Daily challenge generation
+
+**Decision (2026-10-13):** daily challenges are **pre-generated** by a backend service.
+`chart` cards are built from **Yahoo Finance** daily candles; `term` and `scam` cards come from the hand-written datasets.
+
+### How the job works
+
+```
+Scheduler (daily) → POST /internal/jobs/generate-challenges (secret header)
+  1. Fetch recent daily candles for a few symbols from chart_universe.json  (MarketDataProvider)
+  2. Save raw candles to market_candles                                     (our own copy)
+  3. Build 1 chart task: pick a past window, hide the name, compute the answer by rules
+  4. Pick 2 term + 2 scam tasks not shown in the last N days
+  5. Insert daily_challenges rows for the next 7 days that don't exist yet  (idempotent)
+```
+
+- **Generate 7 days ahead.** If one run fails (Yahoo down, server asleep), users still get a challenge.
+- **Idempotent.** `daily_challenges.date` is unique; re-running the job never creates duplicates or changes a day already served.
+- **Last-resort fallback.** If `GET /api/today` finds no row, it builds one from `charts_fallback.json` + the term/scam pools, so the app never shows an empty day.
+
+### How a chart card is built (no predictions)
+
+- Take a window of ~20 **past** daily candles for one symbol.
+- **Hide the stock:** no name or ticker, and prices rescaled so the first close = 100.
+  The card cannot be read as a tip on a real, identifiable stock.
+- **The answer is computed by rules from the data shown**, never about what happens next. Examples:
+  - *Trend:* "Over these 20 days the price went…" Up (> +5%) / Down (< −5%) / Sideways.
+  - *Last candle:* "The last candle is a…" Doji / Hammer / Bullish engulfing / Normal, using standard definitions.
+  - *Biggest move:* "On which day did the price move the most?"
+- The explanation is filled from a template using the same numbers ("It started at 100 and ended at 108, up 8%").
+- Windows that don't produce a clear answer (e.g. a trend right on the ±5% line) are skipped.
+
+### Yahoo Finance: risks and mitigations
+
+| Risk | Mitigation |
+|---|---|
+| No official public API; the unofficial endpoints (used via `yahoo-finance2`) can change or rate-limit | Fetch only once a day for a few symbols; 7-day buffer; fallback chart set |
+| Yahoo's terms limit redistribution and commercial use | Fine for a demo/learning app; we store our own normalised copy and never show raw prices or names. A licensed source is needed for production |
+| Vendor lock-in | All fetching goes through a `MarketDataProvider` interface. `YahooProvider` now; a licensed feed (e.g. NSE data vendor or broker API) later is a new class, not a rewrite |
+
+### Scheduling on free hosting
+
+Free-tier servers sleep when idle, so an in-process cron (e.g. `node-cron`) cannot be relied on.
+
+- **GitHub Actions scheduled workflow** (free) calls `POST /internal/jobs/generate-challenges` once a day,
+  e.g. **18:30 IST**, after the market closes at 15:30. The request wakes the server.
+- The endpoint is protected by a secret header (`X-Job-Secret`) stored as a GitHub Actions secret.
+- At scale this moves to a proper job queue/worker (see "How it scales later").
+
+---
+
 ## 3. Database design (first draft)
 
 ```
@@ -217,8 +269,13 @@ otp_codes        id, identity_type, value, code_hash, expires_at, attempts, used
 sessions         id, user_id, token_hash, expires_at, revoked_at
 datasets         id, name, version, source, content_hash, loaded_at
 tasks            id, dataset_id, type('term'|'scam'|'chart'), prompt, options(jsonb),
-                 answer(hidden), explanation, payload(jsonb), difficulty, language, active
-daily_challenges date, task_ids[5], bonus_multiplier         -- one row per day: 2 term, 2 scam, 1 chart
+                 answer(hidden), explanation, payload(jsonb), difficulty, language, active,
+                 source('dataset'|'generated'), created_at
+daily_challenges date UNIQUE, task_ids[5], bonus_multiplier, generated_at
+                 -- one row per day: 2 term, 2 scam, 1 chart; pre-generated 7 days ahead
+market_candles   symbol, date, open, high, low, close, volume, provider, fetched_at
+                 PRIMARY KEY(symbol, date)                         -- internal only, never sent to clients
+job_runs         id, job, started_at, finished_at, status, details(jsonb)   -- audit of each generation run
 submissions      id, user_id, task_id, challenge_date, answer, is_correct,
                  idempotency_key UNIQUE, created_at
 points_ledger    id, user_id, delta, reason, ref_id, created_at   -- append-only
@@ -257,6 +314,8 @@ GET  /api/today              -> today's challenge (no answers)
 POST /api/submissions        -> { taskId, answer, idempotencyKey } -> result + rewards
 GET  /api/me                 -> points balance, streak, badges
 GET  /api/leaderboard?week=  -> top N + my rank
+
+POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates the next 7 days
 ```
 
 ---
@@ -267,8 +326,10 @@ GET  /api/leaderboard?week=  -> top N + my rank
 2. ~~Login?~~ Decided: guest first, email OTP to save progress and claim rewards; phone later (see 2a).
 3. ~~Which motivators?~~ Decided: points, streak + freeze, 3 badges, weekly leaderboard; no levels.
 4. ~~Backend language?~~ Decided: Node.js + TypeScript (Fastify). Frontend: React.
-5. **Chart data source:** historical candle snapshots from earlier projects, or a small hand-made set?
-6. **How are the daily 5 picked?** Pre-generated `daily_challenges` rows, or chosen on the fly with a date-based seed?
+5. ~~Chart data source?~~ Decided: Yahoo Finance via a backend service; no data from other personal projects (see 2b).
+6. ~~How are the daily 5 picked?~~ Decided: pre-generated `daily_challenges` rows, 7 days ahead (see 2b).
+7. **Challenge day boundary:** one global day in IST for everyone, or per-user local midnight?
+   (IST is simpler and suits an India-first audience; streaks already use the user's timezone.)
 
 ---
 
@@ -284,6 +345,9 @@ GET  /api/leaderboard?week=  -> top N + my rank
 | 2026-10-13 | Backend: Node.js + TypeScript + Fastify (Java considered) | I/O-bound workload, shared types, fast cold starts on free tiers; scales via architecture |
 | 2026-10-13 | Frontend: React (Preact considered) | Keeps a path to a React Native app; non-UI code in `packages/shared` |
 | 2026-10-13 | Login: guest first, email OTP to verify; `users` separate from `identities` | Zero-friction first use; free OTP delivery; phone login later without schema changes |
+| 2026-10-13 | Pre-generate daily challenges 7 days ahead via a scheduled backend job | Never an empty day; idempotent; survives a failed run |
+| 2026-10-13 | Chart cards generated from Yahoo Finance behind a `MarketDataProvider` interface; no data from other personal projects | Fresh content daily; swappable for a licensed source later |
+| 2026-10-13 | Trigger the job from GitHub Actions cron, not an in-process cron | Free-tier servers sleep; the HTTP call wakes them |
 
 ---
 
@@ -295,3 +359,4 @@ Keep this updated for the explainer.
 - 2026-10-13: Claude helped brainstorm trading-themed challenge ideas and the Market Daily 5 design.
 - 2026-10-13: Claude helped compare Node.js vs Java and React vs Preact for the stack decision.
 - 2026-10-13: Claude helped design the guest-first email OTP login and identities schema.
+- 2026-10-13: Claude helped design the daily challenge generation job and rule-based chart cards.
