@@ -288,7 +288,9 @@ user_badges      user_id, badge_id, awarded_at
 
 - **Ledger is the source of truth.** Balance = `SUM(delta)`. Rows are never updated or deleted.
 - **Idempotency keys** on submissions, so network retries never double-reward.
-- **Streaks use the user's local timezone**, so late-night activity counts for the right day.
+- **One day boundary: midnight to midnight IST (Asia/Kolkata)** for challenges, streaks and the weekly
+  leaderboard. A streak counts consecutive IST challenge dates, so "today's challenge" and "today's streak"
+  can never disagree. `users.timezone` is kept for display and future reminders only.
 - **Streak freezes** keep the app forgiving for people with patchy connectivity.
 - **Leaderboard:** weekly query + cache to start; materialized view only if needed.
 
@@ -328,8 +330,8 @@ POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates 
 4. ~~Backend language?~~ Decided: Node.js + TypeScript (Fastify). Frontend: React.
 5. ~~Chart data source?~~ Decided: Yahoo Finance via a backend service; no data from other personal projects (see 2b).
 6. ~~How are the daily 5 picked?~~ Decided: pre-generated `daily_challenges` rows, 7 days ahead (see 2b).
-7. **Challenge day boundary:** one global day in IST for everyone, or per-user local midnight?
-   (IST is simpler and suits an India-first audience; streaks already use the user's timezone.)
+7. ~~Challenge day boundary?~~ Decided: one global day, midnight to midnight IST, for challenges,
+   streaks and the weekly leaderboard (weeks run Monday to Sunday IST).
 
 ---
 
@@ -348,6 +350,7 @@ POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates 
 | 2026-10-13 | Pre-generate daily challenges 7 days ahead via a scheduled backend job | Never an empty day; idempotent; survives a failed run |
 | 2026-10-13 | Chart cards generated from Yahoo Finance behind a `MarketDataProvider` interface; no data from other personal projects | Fresh content daily; swappable for a licensed source later |
 | 2026-10-13 | Trigger the job from GitHub Actions cron, not an in-process cron | Free-tier servers sleep; the HTTP call wakes them |
+| 2026-10-13 | Day boundary: midnight IST for challenges, streaks and leaderboard weeks (Mon to Sun) | India-first audience; one clock means challenge and streak never disagree; simpler code and tests |
 
 ---
 
