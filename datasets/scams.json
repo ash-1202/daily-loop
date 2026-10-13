@@ -1,0 +1,251 @@
+{
+  "dataset": "scams",
+  "name": "Scam or Safe?",
+  "version": 1,
+  "items": [
+    {
+      "id": "scam_0001",
+      "message": "Guaranteed 5% profit every day! Join my Telegram VIP group for just ₹999.",
+      "is_scam": true,
+      "red_flags": ["Guaranteed profit", "Unrealistic returns", "Pay to join a group"],
+      "explanation": "No one can guarantee profit in the stock market. 5% a day would turn ₹1,000 into crores in a year. That is impossible.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0002",
+      "message": "Sir, I am calling from SEBI. Your demat account will be blocked today. Tell me the OTP to stop it.",
+      "is_scam": true,
+      "red_flags": ["Asks for OTP", "Pretends to be SEBI", "Creates panic"],
+      "explanation": "SEBI never calls investors to ask for an OTP. Never share an OTP with anyone, even if they say they are from the government.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0003",
+      "message": "Buy XYZ Ltd now! Price will double in 3 days. Inside news. Forward to 10 friends.",
+      "is_scam": true,
+      "red_flags": ["Promise to double", "'Inside news'", "Asks you to forward"],
+      "explanation": "This is a 'pump and dump'. Scammers push up the price of a small stock, then sell their own shares when you buy.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0004",
+      "message": "Give us your trading app login. Our expert will trade for you and share 50% of the profit.",
+      "is_scam": true,
+      "red_flags": ["Asks for your login", "Stranger trades with your money"],
+      "explanation": "Never share your trading login or password. Someone else can empty your account, and you are responsible for every trade.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0005",
+      "message": "Download our app from this link (not on Play Store) to get IPO shares at a special discount.",
+      "is_scam": true,
+      "red_flags": ["App outside the Play Store", "Special discount on IPO"],
+      "explanation": "Fake trading apps show fake profits and steal your money. Use only your registered broker's app from the official app store.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0006",
+      "message": "Congratulations! You won ₹50,000 in our stock contest. Pay ₹2,000 processing fee to claim it.",
+      "is_scam": true,
+      "red_flags": ["Prize you never entered for", "Pay a fee to get money"],
+      "explanation": "Real prizes never ask you to pay first. Once you pay the 'fee', the scammer disappears.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0007",
+      "message": "Join our WhatsApp group. Our 'institutional account' lets you buy shares at a lower price than the market.",
+      "is_scam": true,
+      "red_flags": [
+        "Secret 'institutional account'",
+        "Price lower than the market",
+        "WhatsApp group"
+      ],
+      "explanation": "There is no special account that lets ordinary people buy below the market price. Trade only through a SEBI-registered broker.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0008",
+      "message": "Double your money in 30 days with our stock plan. Only 10 seats left, join fast!",
+      "is_scam": true,
+      "red_flags": ["Double your money", "Limited seats", "Pressure to hurry"],
+      "explanation": "Promises to double money quickly and pressure to act fast are classic scam signs. Real investments never promise this.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0009",
+      "message": "I am the famous TV market expert. Message me privately for my secret stock tips.",
+      "is_scam": true,
+      "red_flags": ["Celebrity contacts you first", "Secret tips in private chat"],
+      "explanation": "Scammers copy photos and videos of famous experts, sometimes using AI. Real experts do not send you secret tips on chat.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0010",
+      "message": "Your KYC is incomplete. Click this link and enter your PAN, Aadhaar and bank PIN now.",
+      "is_scam": true,
+      "red_flags": ["Unknown link", "Asks for bank PIN", "Urgency"],
+      "explanation": "No real company asks for your bank PIN. Update KYC only inside your broker's official app or website.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0011",
+      "message": "Send money to this personal UPI ID and we will buy shares for you at a lower price.",
+      "is_scam": true,
+      "red_flags": ["Pay to a personal UPI ID", "Lower price than market"],
+      "explanation": "Money for shares goes only to your own trading account with a registered broker, never to a person's UPI ID.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0012",
+      "message": "Risk-free F&O strategy with 100% accuracy! Pay ₹5,000 once for lifetime trading calls.",
+      "is_scam": true,
+      "red_flags": ["Risk-free", "100% accuracy", "Pay for tips"],
+      "explanation": "No strategy is 100% accurate or risk-free. F&O is high risk, and most individual traders lose money.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0013",
+      "message": "Our advice is SEBI approved, trust us. You don't need to check any registration number.",
+      "is_scam": true,
+      "red_flags": ["Refuses to share registration", "Says 'trust us'"],
+      "explanation": "Real advisers share their SEBI registration number. You can check it on the SEBI website. Refusing to share it is a big warning sign.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0014",
+      "message": "Your app shows ₹2 lakh profit! To withdraw it, first pay 20% tax to our account.",
+      "is_scam": true,
+      "red_flags": ["Pay before you withdraw", "Profit only shown in their app"],
+      "explanation": "Fake apps show big fake profits. When you try to withdraw, they ask for 'tax' or 'fees'. Real tax is not paid to an app.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0015",
+      "message": "Get a loan against your shares in 5 minutes. Just send your demat password.",
+      "is_scam": true,
+      "red_flags": ["Asks for your password", "Too fast and easy"],
+      "explanation": "No genuine lender asks for your demat password. With it, a scammer can sell your shares.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0016",
+      "message": "Penny stock ABC will go from ₹2 to ₹100! Buy before the market opens tomorrow!",
+      "is_scam": true,
+      "red_flags": ["Huge price promise", "Penny stock", "Hurry"],
+      "explanation": "Very cheap 'penny' stocks are easy to push up and dump. Big promises plus urgency are signs of a pump and dump.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0017",
+      "message": "Get ₹10,000 free trading credit! Just share the OTP we sent to your phone.",
+      "is_scam": true,
+      "red_flags": ["Asks for OTP", "Free money"],
+      "explanation": "An OTP is like a key to your account. Anyone asking for it wants to take your money, not give you money.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0018",
+      "message": "Your mutual fund will lapse today. Pay the renewal amount through this link to keep it.",
+      "is_scam": true,
+      "red_flags": ["Mutual funds don't 'lapse'", "Payment link", "Urgency"],
+      "explanation": "Mutual fund investments do not lapse like insurance. Check your investments only through official apps or statements.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0019",
+      "message": "We can recover your old trading losses for you. Pay ₹3,000 registration fee to start.",
+      "is_scam": true,
+      "red_flags": ["Promise to recover losses", "Upfront fee"],
+      "explanation": "'Recovery' scams target people who already lost money. Complaints are free: use SEBI SCORES or your broker's grievance desk.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0020",
+      "message": "Earn ₹5,000 a day by liking stock videos. Deposit ₹1,000 first to unlock the tasks.",
+      "is_scam": true,
+      "red_flags": ["Money for easy tasks", "Deposit to start"],
+      "explanation": "Task scams pay small amounts at first to win your trust, then ask for bigger deposits and disappear.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0021",
+      "message": "NSE: You bought 5 shares of ABC Ltd today. If this trade was not done by you, report it to your broker.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "Exchanges send trade alerts like this so you can spot trades you did not make. It asks for nothing, has no link and no OTP request.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0022",
+      "message": "Your SIP of ₹500 in XYZ Mutual Fund for October was successful. Units will be added to your account.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "This is a normal confirmation for a SIP you set up. It asks you to do nothing.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0023",
+      "message": "Bank alert: ₹500 debited for your SIP. Never share your OTP or PIN with anyone.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "A normal debit alert with a safety reminder. Real banks tell you never to share OTPs; they don't ask for them.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0024",
+      "message": "An adviser gives you their SEBI registration number. You check it on the SEBI website and it matches.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "Checking registration on the SEBI website is exactly the right step. Even then, no adviser can guarantee returns.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0025",
+      "message": "Your monthly demat statement is ready. Open your broker app to view it.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "Brokers and depositories send regular statements. It points you to your own app, not to an unknown link.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0026",
+      "message": "IPO update: allotment results are out. You can check your status on the registrar or exchange website.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "IPO allotment status is public and is checked on official websites. No payment or OTP is asked for.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0027",
+      "message": "Fund factsheet note: Past returns do not guarantee future returns. Read all scheme documents carefully.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "This is a standard, honest warning. Real investment products remind you about risk instead of promising profit.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0028",
+      "message": "Your stop-loss order for 10 shares of ABC Ltd was triggered. Sold at ₹245.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "This confirms an order you placed yourself. You can check it in your broker app's order history.",
+      "difficulty": 2
+    },
+    {
+      "id": "scam_0029",
+      "message": "Your broker: we will never call you for your password or OTP. Report suspicious calls to us.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "This is a safety message. It warns you about scams and asks you for nothing.",
+      "difficulty": 1
+    },
+    {
+      "id": "scam_0030",
+      "message": "Markets will be closed tomorrow for a public holiday. Orders placed today will not carry over.",
+      "is_scam": false,
+      "red_flags": [],
+      "explanation": "Exchanges publish a holiday list every year. This is normal information with no request.",
+      "difficulty": 1
+    }
+  ]
+}

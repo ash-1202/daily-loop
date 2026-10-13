@@ -1,7 +1,13 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/server.ts'],
+  // Flat output (dist/server.js, dist/migrate.js, dist/seed.js) keeps every file at the same depth,
+  // so paths relative to the repo root (repoPath, the .env lookup) work the same as in src/.
+  entry: {
+    server: 'src/server.ts',
+    migrate: 'src/scripts/migrate.ts',
+    seed: 'src/scripts/seed.ts',
+  },
   format: ['esm'],
   platform: 'node',
   target: 'node20',
