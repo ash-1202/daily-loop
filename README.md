@@ -18,6 +18,34 @@ Every architecture choice below follows from three facts about the users:
 
 ---
 
+## The daily challenge: Market Daily 5
+
+A one-minute daily habit that builds financial literacy around trading in India.
+Every day the user answers **5 short cards**:
+
+| Cards | Type | What the user does |
+|---|---|---|
+| 2 | 📚 **Market word** | Picks the right meaning of a term such as SIP, T+1, circuit limit or stop-loss |
+| 2 | 🛡️ **Scam or Safe?** | Reads a realistic message ("Guaranteed 5% daily! Join my Telegram VIP") and taps 🚩 Scam or ✅ Safe |
+| 1 | 📈 **Read the chart** | Sees a past candlestick snippet (stock name hidden) and names the pattern or trend |
+
+After each answer a short **"Why?"** explanation appears, so even a wrong answer teaches something.
+
+**Rewards**
+
+| Mechanic | Rule |
+|---|---|
+| Points | +10 per correct answer, +5 for finishing all 5 |
+| Streak | 🔥 consecutive days, with 1 free streak freeze per week |
+| Badges | 🛡️ Scam Spotter · 📈 Chart Reader · 📚 7-Day Learner |
+| Leaderboard | Weekly, by points |
+
+**Guardrail: we reward learning, never market predictions.** Points come only from answering
+knowledge questions correctly. There is no betting on prices and no stock tips; chart cards use
+past data with the stock name hidden.
+
+---
+
 ## Architecture
 
 **One rule: the frontend shows things, the backend decides things.**
@@ -58,9 +86,9 @@ flowchart LR
 ```
 users            id, display_name, device_token, timezone, created_at
 datasets         id, name, version, source, content_hash, loaded_at
-tasks            id, dataset_id, type, prompt, options(jsonb), answer(hidden),
-                 difficulty, language, active
-daily_challenges date, task_ids[], bonus_multiplier          -- one row per day
+tasks            id, dataset_id, type('term'|'scam'|'chart'), prompt, options(jsonb),
+                 answer(hidden), explanation, payload(jsonb), difficulty, language, active
+daily_challenges date, task_ids[5], bonus_multiplier         -- one row per day: 2 term, 2 scam, 1 chart
 submissions      id, user_id, task_id, challenge_date, answer, is_correct,
                  idempotency_key UNIQUE, created_at
 points_ledger    id, user_id, delta, reason, ref_id, created_at   -- append-only
@@ -80,7 +108,14 @@ Key ideas:
 
 ## Datasets
 
-Task content (e.g. question banks) is kept in `datasets/` as JSON or CSV, versioned in git.
+Task content is kept in `datasets/` as JSON, versioned in git:
+
+```
+datasets/
+├── terms.json    # id, question, options[], answer, explanation, icon
+├── scams.json    # id, message, is_scam, red_flags[], explanation
+└── charts.json   # id, ohlc[], pattern, options[], answer, explanation   (stock name hidden)
+```
 
 1. Each item has a **stable ID** (e.g. `q_0001`).
 2. The seed script in `db/seed/` **validates** every file against the shared schemas.
