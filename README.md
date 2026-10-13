@@ -1,2 +1,134 @@
 # daily-loop
+
 A lightweight, mobile-first web app built around a short daily task with streaks, points and badges. Rewards are checked on the server and question sets are versioned and loaded into Postgres.
+
+> **Status:** architecture and planning. The full thought process and decision log live in [docs/brainstorm.md](docs/brainstorm.md).
+
+---
+
+## Who we are building for
+
+Every architecture choice below follows from three facts about the users:
+
+| Fact | What it means for the design |
+|---|---|
+| Modest Android phones on mobile data | Small JS bundle (target < ~150 KB), light assets, fast first load on 3G, works offline |
+| English is often a second language | Short, plain words; icons next to text; all UI strings in one file so translation is easy later |
+| Rewards are worth real money to them | Rewards are calculated only on the server, recorded once, and never lost or double-counted |
+
+---
+
+## Architecture
+
+**One rule: the frontend shows things, the backend decides things.**
+
+```mermaid
+flowchart LR
+    U[User on Android phone] --> W[Web app<br/>PWA · apps/web]
+    W -- REST / JSON --> A[API<br/>apps/api]
+    A --> D[(Postgres)]
+    S[datasets/<br/>JSON · CSV] -- validate + seed --> D
+    P[packages/shared<br/>types + schemas] -.-> W
+    P -.-> A
+    P -.-> S
+```
+
+| Concern | Frontend (`apps/web`) | Backend (`apps/api`) |
+|---|---|---|
+| Showing the task | Renders the task | Serves today's task **without answers** |
+| Submitting | Sends answer + idempotency key | Validates, scores, records exactly once |
+| Points and streaks | Displays them | Calculates them; append-only ledger |
+| Badges | Celebration UI | Rules decide when they are awarded |
+| Leaderboard | Displays it | Aggregates it (cached) |
+| Offline | Queues submissions, retries later | Idempotent, so retries never pay twice |
+
+### Proposed stack
+
+| Layer | Choice | Why |
+|---|---|---|
+| Frontend | Preact or React + Vite, PWA, TypeScript | Small bundle, offline support, installable on Android |
+| Backend | Node + Fastify or Hono, TypeScript | Shares types and validation with the frontend |
+| Database | Postgres (Neon or Supabase free tier) | Reliable transactions for rewards; free hosting |
+| Hosting | Cloudflare Pages / Vercel (web), Render / Fly.io (API) | Free tiers, simple deploys |
+
+---
+
+## Data model (first draft)
+
+```
+users            id, display_name, device_token, timezone, created_at
+datasets         id, name, version, source, content_hash, loaded_at
+tasks            id, dataset_id, type, prompt, options(jsonb), answer(hidden),
+                 difficulty, language, active
+daily_challenges date, task_ids[], bonus_multiplier          -- one row per day
+submissions      id, user_id, task_id, challenge_date, answer, is_correct,
+                 idempotency_key UNIQUE, created_at
+points_ledger    id, user_id, delta, reason, ref_id, created_at   -- append-only
+streaks          user_id, current, longest, last_active_date, freezes_left
+badges           id, code, name, rule(jsonb), icon
+user_badges      user_id, badge_id, awarded_at
+```
+
+Key ideas:
+
+- **The points ledger is the source of truth.** A balance is `SUM(delta)`. Rows are never edited or deleted, so every point can be traced.
+- **Idempotency keys** on submissions stop a retry on a weak network from rewarding twice.
+- **Streaks follow the user's local timezone**, so late-night activity counts for the right day.
+- **Streak freezes** forgive a missed day, which matters for people with patchy connectivity.
+
+---
+
+## Datasets
+
+Task content (e.g. question banks) is kept in `datasets/` as JSON or CSV, versioned in git.
+
+1. Each item has a **stable ID** (e.g. `q_0001`).
+2. The seed script in `db/seed/` **validates** every file against the shared schemas.
+3. Items are **upserted** by ID and the file's `content_hash` is recorded, so re-seeding is always safe.
+
+Adding new content means editing a dataset file and re-running the seed. No code changes.
+
+---
+
+## API (draft)
+
+```
+POST /api/session            create or restore an anonymous user (device token)
+GET  /api/today              today's challenge (no answers)
+POST /api/submissions        { taskId, answer, idempotencyKey } -> result + rewards
+GET  /api/me                 points balance, streak, badges
+GET  /api/leaderboard?week=  top N + my rank
+```
+
+---
+
+## Repository layout
+
+```
+daily-loop/
+├── apps/
+│   ├── web/          # frontend (PWA)
+│   └── api/          # backend (REST API)
+├── packages/
+│   └── shared/       # shared types + validation schemas
+├── datasets/         # versioned content (JSON/CSV)
+├── db/
+│   ├── migrations/   # SQL migrations
+│   └── seed/         # validate + load datasets into the DB
+└── docs/
+    └── brainstorm.md # thought process and decision log
+```
+
+---
+
+## Getting started
+
+_Coming soon._ Setup steps will be added once the first version of the app and API is in place.
+
+## Use of AI tools
+
+AI tools (Claude) were used to help draft the architecture and documentation. Details are tracked in [docs/brainstorm.md](docs/brainstorm.md#8-where-ai-tools-were-used).
+
+## License
+
+See [LICENSE](LICENSE).
