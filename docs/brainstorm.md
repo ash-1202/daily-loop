@@ -294,14 +294,37 @@ user_badges      user_id, badge_id, awarded_at
 - **Streak freezes** keep the app forgiving for people with patchy connectivity.
 - **Leaderboard:** weekly query + cache to start; materialized view only if needed.
 
+### Changes made while implementing (2026-10-13)
+
+The draft above was implemented in `db/migrations/0001…0004`. What changed, and why:
+
+| Draft | Implemented | Why |
+|---|---|---|
+| `daily_challenges.task_ids[5]` array | Join table `daily_challenge_tasks (challenge_date, position 1-5, task_id)` | Postgres cannot enforce foreign keys inside an array. The join table guarantees every task exists, no task repeats in a day, and at most 5 positions |
+| `submissions` references `task_id` | Composite FK `(challenge_date, task_id) → daily_challenge_tasks` + `UNIQUE(user_id, challenge_date, task_id)` | A user can only answer cards from that day's challenge, and only once each |
+| Ledger "append-only" by convention | `BEFORE UPDATE OR DELETE` trigger that raises an error + `UNIQUE(user_id, reason, ref_id)` + `CHECK (delta <> 0)` | Rules that protect real money belong in the database, not only in code that might have a bug |
+| `tasks.answer` hidden | Also `CHECK (options ? answer)` | A typo in a dataset can never create an unanswerable card |
+| `badges.code` | `badges.id` is the code (e.g. `scam_spotter`) + `description`, `sort_order` | One stable identifier instead of two |
+| `streaks.freezes_left` | + `freeze_week` | Knows which IST week the free freeze belongs to, so it refills each Monday |
+| `datasets` | + `item_count` | Quick check of what was loaded |
+
 ---
 
 ## 4. Datasets → DB pipeline
 
-- Content lives in `datasets/` as JSON/CSV with **stable IDs** (e.g. `q_0001`); git versions it.
-- A seed script in `db/seed/` **validates** each file against the shared schemas,
-  **upserts** by ID, and records `content_hash` in `datasets`, so re-running is safe.
-- Adding content = edit a dataset file + re-seed. No code changes.
+- Content lives in `datasets/` as JSON with **stable IDs** (e.g. `term_0001`, `scam_0001`); git versions it.
+- The seed (`apps/api/src/seed/seed.ts`) **validates every file first** against the schemas in
+  `packages/shared` plus cross-item rules (unique IDs and questions, distractors different from the
+  answer, red flags only on scams). If any file is invalid, **nothing is written**.
+- It **upserts** by ID and records the file's sha256 in `datasets`, so an unchanged file is skipped and re-running is safe.
+- Items removed from a file are **deactivated, never deleted**: past submissions still reference them.
+- Term items store `answer` + `distractors` (not a positional `options` list), so the file has no
+  "correct answer is always first" bias; options are shuffled when a day's challenge is built.
+- Adding content = edit a dataset file, `npm run datasets:check`, `npm run db:seed`. No code changes.
+- First content (v1): 30 market words, 30 scam-or-safe messages (20 scams / 10 safe, so "always tap
+  Scam" is not a winning strategy), 4 badges (First Step, 7-Day Learner, Scam Spotter, Chart Reader).
+- `chart_universe.json` and `charts_fallback.json` are deferred to the chart generator step, where
+  the rules that compute chart answers are written.
 
 ---
 
@@ -355,6 +378,11 @@ POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates 
 | 2026-10-13 | Shared schemas use `zod/mini` | Cut the web bundle from 92 KB to 74 KB gzipped, which matters on low-end phones |
 | 2026-10-13 | API reads `API_PORT` first, then `PORT`; local Postgres on host port 5433 | Avoids clashing with other dev servers and an existing local Postgres; hosts like Render still set `PORT` |
 | 2026-10-13 | Postgres pool has an `error` listener | Without it, a dropped idle connection (DB restart, Neon idle timeout) crashes the API; found while testing |
+| 2026-10-13 | Own ~80-line migration runner over plain SQL files (no ORM, no migration library) | Plain SQL is easy to review; runner adds checksums, one transaction per file and an advisory lock |
+| 2026-10-13 | Money-related rules enforced in Postgres (triggers, unique keys, composite FKs, checks) | A bug in application code cannot double-pay or edit history |
+| 2026-10-13 | Join table `daily_challenge_tasks` instead of a `task_ids[]` array | Arrays cannot have foreign keys |
+| 2026-10-13 | Tests run against a separate `daily_loop_test` database; each test rolls back | Dev data is never touched; tests stay independent |
+| 2026-10-13 | Badge "First Step" added (4 badges instead of 3) | A reward on day one makes the first session feel complete |
 
 ---
 
@@ -369,3 +397,5 @@ Keep this updated for the explainer.
 - 2026-10-13: Claude helped design the daily challenge generation job and rule-based chart cards.
 - 2026-10-13: Claude set up the monorepo (workspaces, TypeScript, ESLint, Prettier, Docker Postgres,
   Fastify health endpoint, React page) and tested it, including a database restart.
+- 2026-10-13: Claude wrote the SQL migrations, migration runner, seed script and tests, and drafted
+  the first 30 market-word and 30 scam-or-safe cards (content to be reviewed by a human for accuracy and tone).
