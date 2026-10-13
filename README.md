@@ -2,7 +2,10 @@
 
 A lightweight, mobile-first web app built around a short daily task with streaks, points and badges. Rewards are checked on the server and question sets are versioned and loaded into Postgres.
 
-> **Status:** architecture and planning. The full thought process and decision log live in [docs/brainstorm.md](docs/brainstorm.md).
+> **Status:** in development. Monorepo, API and web app are set up; features are being added step by step.
+>
+> - **Why** things are built this way: [docs/brainstorm.md](docs/brainstorm.md) (decisions and reasoning)
+> - **How** the code was built, step by step: [docs/BUILD_LOG.md](docs/BUILD_LOG.md) (learning journal)
 
 ---
 
@@ -229,7 +232,8 @@ daily-loop/
 │   ├── migrations/   # SQL migrations
 │   └── seed/         # validate + load datasets into the DB
 ├── docs/
-│   └── brainstorm.md # thought process and decision log
+│   ├── brainstorm.md # thought process and decision log
+│   └── BUILD_LOG.md  # step-by-step build journal
 ├── docker-compose.yml  # local Postgres
 └── package.json        # npm workspaces + root scripts
 ```
