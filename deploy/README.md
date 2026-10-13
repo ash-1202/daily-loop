@@ -25,7 +25,7 @@ Internet ─► ChaiHouse's Caddy (:80/:443, HTTPS) ─► daily-loop-app:3000 �
 | `backup-daily-loop.sh` | `/opt/daily-loop/backup.sh` | Nightly `pg_dump`, keeps 14 days |
 | `generate-daily-loop.sh` | `/opt/daily-loop/generate.sh` | Daily chart cards + challenges for the next 7 days (log: `generate.log`) |
 | `Caddyfile.daily5` | appended to `/opt/chaihouse/Caddyfile` | HTTPS site block for daily5.tradertrix.com |
-| — | `/opt/daily-loop/.env` | `POSTGRES_PASSWORD=…` (root-only, never in git) |
+| — | `/opt/daily-loop/.env` | `POSTGRES_PASSWORD=…`, and for email login `EMAIL_PROVIDER`, `RESEND_API_KEY`, `OTP_SECRET` (root-only, never in git; passed to the app container) |
 | — | `/opt/daily-loop/current_tag`, `previous_tag` | Which commit is live, and the one before |
 
 ## Sharing the server with ChaiHouse
@@ -96,6 +96,31 @@ install -m 700 generate-daily-loop.sh /opt/daily-loop/generate.sh
    - Variable `DEPLOY_HOST`: `139.59.74.146`
 3. After the first image is pushed: **Packages → daily-loop → Package settings → Change visibility
    → Public**, so the droplet can pull without credentials (the repository is public anyway).
+
+## Turning on email login (one time)
+
+Email login is off in production until all of this is done; the app simply hides it.
+
+1. **Resend account** (resend.com) → **Domains → Add domain** → `mail.tradertrix.com` (a sending
+   subdomain keeps this app's email reputation separate from any other mail on the main domain).
+2. **DNS at GoDaddy:** add exactly the records Resend shows (SPF `TXT`, DKIM `TXT`/`CNAME`, and the
+   `MX` for bounces), wait until Resend says **Verified**.
+3. **API key:** Resend → API Keys → create one with **Sending access** only, for that domain.
+4. **On the droplet, as root** (the person who owns the Resend account types the key; it never goes in git):
+
+   ```bash
+   cd /opt/daily-loop
+   umask 077
+   echo "EMAIL_PROVIDER=resend" >> .env
+   echo "OTP_SECRET=$(openssl rand -hex 32)" >> .env
+   read -rsp 'Resend API key: ' K && echo "RESEND_API_KEY=$K" >> .env && unset K; echo
+   IMAGE_TAG=$(cat current_tag) docker compose -f docker-compose.prod.yml up -d --wait daily-loop-app
+   docker logs daily-loop-daily-loop-app-1 2>&1 | grep -o 'email login: [a-z]*'    # → email login: resend
+   ```
+
+5. Open the app → Me → **Save your progress** → enter your own email → the code should arrive.
+
+To switch it off again: set `EMAIL_PROVIDER=none` in `.env` and run the `up -d` line above.
 
 ## Everyday operations (on the droplet)
 

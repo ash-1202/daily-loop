@@ -7,11 +7,11 @@
 > - **What:** a one-minute daily habit: 5 cards (market words, "Scam or Safe?" messages, and a real
 >   NSE chart). Points, a streak, badges and a weekly leaderboard bring people back.
 > - **Why it fits your users:** it teaches how to protect and grow money, rewards *learning, never
->   predictions*, uses plain English, and is ~81 KB on a phone, so it loads fast on mobile data.
+>   predictions*, uses plain English, and is ~83 KB on a phone, so it loads fast on mobile data.
 > - **How it's built:** the server decides every point (append-only ledger, rules enforced in the
 >   database, tested under simultaneous requests); one Docker image, auto-deployed from GitHub on
 >   every merge with automatic rollback.
-> - **Left out:** email login (designed, not built), offline mode, Hindi, reminders. Details below.
+> - **Left out:** offline mode, Hindi, reminders, phone login. Details below.
 > - **AI:** built with Claude Code; I made the decisions and reviewed and tested every step (see below).
 
 <p>
@@ -50,7 +50,7 @@ I started from what you told me about your users:
   "stock tips".
 - **Many read English as a second language.** One idea per card, short sentences, common words, icons
   next to key words, and all the text in one file, ready for Hindi.
-- **Modest Android phones on mobile data.** The whole app is about **81 KB of JavaScript + 2 KB of CSS**
+- **Modest Android phones on mobile data.** The whole app is about **83 KB of JavaScript + 2 KB of CSS**
   (gzipped), with no UI or chart libraries. Buttons are at least 56 px tall. If an answer fails to send,
   the app says so and resends the *same* request, which can never be counted twice.
 
@@ -65,6 +65,11 @@ tap caused an error; with it, the bonus is paid exactly once.
 
 **Answers stay on the server until you answer.** The day's cards are sent without answers or
 explanations; a test checks the raw response.
+
+**Save progress with an email code, no passwords.** Codes last 10 minutes, work once, lock after 5
+wrong tries, and are stored only as a keyed hash. Requests are rate-limited, and the server answers the
+same for every email so nobody can check who uses the app. The email itself says "we will never ask you
+for this code", the same lesson as the scam cards.
 
 **One clock: India time.** A day runs midnight to midnight IST for everyone, for challenges, streaks
 and leaderboard weeks, so "today's challenge" and "today's streak" can't disagree.
@@ -89,7 +94,7 @@ the link would wait 30–60 seconds.
 
 | Left out | Why / what I'd do next |
 |---|---|
-| **Email login** | Designed (guest first; email OTP to save progress and claim rewards; phone OTP later without schema changes) and the tables exist, but not built. Guests can play fully. **Before rewards become real money, verified accounts are essential**: today one person could create many guest accounts to farm the leaderboard. |
+| **Phone login, and required verification** | Email login is built: guests can save progress with a 6-digit email code and sign in on another phone. Phone OTP needs DLT registration in India, so it's later (no schema change needed). Guests can still play without verifying; **before rewards become real money, verification must be required** (and one-person-one-account checks added), or one person could farm the leaderboard with many guest accounts. |
 | **Offline mode** | Failed answers retry safely, but there's no service worker yet, so the app needs a connection to open. |
 | **Hindi and other languages** | All text is in one file to make this easy; the cards themselves need careful translation, not machine output. |
 | **Reminders** | A daily push or WhatsApp nudge would help retention most, but needs consent and a messaging setup. |
@@ -110,7 +115,7 @@ the split:
 - **Claude wrote most of the code, tests, documentation and card text** from those decisions, and
   helped me compare options (for example, which hosts sleep, and why Render's free tier was the wrong
   fit). I reviewed every step and asked for changes.
-- **Verification wasn't left to trust.** Every step was tested: 81 automated tests, playing the app in
+- **Verification wasn't left to trust.** Every step was tested: 96 automated tests, playing the app in
   a phone-sized browser, deliberately breaking code to prove the tests catch it, and checking the live
   server. Mistakes were caught this way, including a real one in production: the first deploy connected
   to the *other* product's database because both services were called `db` on a shared Docker network.
