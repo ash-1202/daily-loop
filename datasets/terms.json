@@ -1,0 +1,361 @@
+{
+  "dataset": "terms",
+  "name": "Market words",
+  "version": 1,
+  "items": [
+    {
+      "id": "term_0001",
+      "question": "What is a SIP?",
+      "answer": "Investing a fixed amount regularly, like every month",
+      "distractors": ["A one-time big investment", "A type of bank loan", "A government tax"],
+      "explanation": "SIP means Systematic Investment Plan. You invest a small fixed amount at regular times, for example ₹500 every month in a mutual fund.",
+      "icon": "📅",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0002",
+      "question": "What is a mutual fund?",
+      "answer": "Money from many people, invested together by a fund manager",
+      "distractors": [
+        "A loan from your friends",
+        "A fixed deposit in a bank",
+        "Shares of only one company"
+      ],
+      "explanation": "A mutual fund collects money from many investors. A professional manager invests it in shares, bonds or both.",
+      "icon": "🧺",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0003",
+      "question": "You own one share of a company. What does that mean?",
+      "answer": "You own a small part of that company",
+      "distractors": [
+        "You lent money to the company",
+        "You work for the company",
+        "The company pays you a salary"
+      ],
+      "explanation": "A share is a small piece of ownership. If the company grows, the value of your share can grow too. It can also fall.",
+      "icon": "🧩",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0004",
+      "question": "What is a demat account used for?",
+      "answer": "Keeping your shares in electronic form",
+      "distractors": ["Paying electricity bills", "Getting a home loan", "Sending money abroad"],
+      "explanation": "Demat means dematerialised. Your shares are kept safely in electronic form, like money in a bank account.",
+      "icon": "🗂️",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0005",
+      "question": "What is the Sensex?",
+      "answer": "An index of 30 large companies on the BSE",
+      "distractors": ["A bank in Mumbai", "A type of tax", "A government bond"],
+      "explanation": "The Sensex tracks 30 large companies listed on the BSE. When people say 'the market went up', they often mean the Sensex or Nifty went up.",
+      "icon": "📊",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0006",
+      "question": "What does the Nifty 50 track?",
+      "answer": "50 large companies listed on the NSE",
+      "distractors": ["50 banks in India", "The price of gold", "50 mutual funds"],
+      "explanation": "The Nifty 50 is an index of 50 large companies on the National Stock Exchange (NSE).",
+      "icon": "📈",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0007",
+      "question": "India uses T+1 settlement for shares. What does it mean?",
+      "answer": "The trade is completed one working day after you trade",
+      "distractors": [
+        "You can trade only once a day",
+        "You pay 1% extra on every trade",
+        "The market opens at 1 pm"
+      ],
+      "explanation": "T is the trade day. With T+1, shares reach the buyer and money reaches the seller on the next working day.",
+      "icon": "⏱️",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0008",
+      "question": "In a 'bull market', prices are mostly…",
+      "answer": "Going up",
+      "distractors": ["Going down", "Not changing", "Fixed by the government"],
+      "explanation": "A bull attacks by pushing its horns up. A bull market is a long period when prices mostly rise.",
+      "icon": "🐂",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0009",
+      "question": "In a 'bear market', prices are mostly…",
+      "answer": "Going down",
+      "distractors": ["Going up", "Not changing", "Fixed by the government"],
+      "explanation": "A bear attacks by swiping its paws down. A bear market is a long period when prices mostly fall.",
+      "icon": "🐻",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0010",
+      "question": "What does a stop-loss order do?",
+      "answer": "Sells automatically if the price falls to a level you choose",
+      "distractors": [
+        "Stops you from buying more shares",
+        "Makes sure you never lose money",
+        "Closes the stock market for the day"
+      ],
+      "explanation": "A stop-loss limits how much you can lose. But if the price falls very fast, you may sell lower than your chosen level.",
+      "icon": "🛑",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0011",
+      "question": "What is a dividend?",
+      "answer": "A part of the company's profit paid to shareholders",
+      "distractors": [
+        "A fee you pay to your broker",
+        "A loan from the company",
+        "The price of one share"
+      ],
+      "explanation": "Some companies share part of their profit with shareholders as a dividend. It is not guaranteed.",
+      "icon": "💰",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0012",
+      "question": "What is an IPO?",
+      "answer": "When a company sells its shares to the public for the first time",
+      "distractors": [
+        "When a company closes down",
+        "A tax on share profits",
+        "A type of bank account"
+      ],
+      "explanation": "IPO means Initial Public Offering. After the IPO, the company's shares can be bought and sold on the stock exchange.",
+      "icon": "🚀",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0013",
+      "question": "What is a limit order?",
+      "answer": "Buy or sell only at your chosen price or better",
+      "distractors": [
+        "Buy or sell at any price right now",
+        "An order with no time limit",
+        "An order only banks can place"
+      ],
+      "explanation": "With a limit order you set the price. If the market does not reach your price, the order is not filled.",
+      "icon": "🎯",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0014",
+      "question": "What is a market order?",
+      "answer": "Buy or sell right now at the best available price",
+      "distractors": [
+        "Buy or sell only at your chosen price",
+        "An order to buy the whole market",
+        "An order that waits until tomorrow"
+      ],
+      "explanation": "A market order is filled quickly, but you do not control the exact price you get.",
+      "icon": "⚡",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0015",
+      "question": "What does 'diversification' mean?",
+      "answer": "Spreading money across different investments to lower risk",
+      "distractors": [
+        "Putting all your money in one share",
+        "Changing your broker often",
+        "Investing only in gold"
+      ],
+      "explanation": "Don't put all your eggs in one basket. If one investment falls, the others can balance the loss.",
+      "icon": "🥚",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0016",
+      "question": "A stock hits its 'upper circuit'. What does it mean?",
+      "answer": "It reached the highest price allowed for that day",
+      "distractors": [
+        "The company has closed",
+        "The stock is now free to buy",
+        "The electricity at the exchange failed"
+      ],
+      "explanation": "Exchanges set daily price limits (price bands) for many stocks, such as 5%, 10% or 20%. The price cannot go above the upper limit that day.",
+      "icon": "🔝",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0017",
+      "question": "How is market capitalisation calculated?",
+      "answer": "Share price × total number of shares",
+      "distractors": [
+        "Company profit × 10",
+        "Number of employees × salary",
+        "Share price ÷ number of shares"
+      ],
+      "explanation": "Market cap shows the total market value of a company. Large-cap means a very big company.",
+      "icon": "🏢",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0018",
+      "question": "What does a stockbroker do?",
+      "answer": "Places your buy and sell orders on the exchange",
+      "distractors": [
+        "Guarantees you a profit",
+        "Decides the price of every share",
+        "Prints share certificates"
+      ],
+      "explanation": "You cannot trade on the exchange directly. A registered broker places orders for you, usually through an app.",
+      "icon": "🤝",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0019",
+      "question": "What is SEBI?",
+      "answer": "India's market regulator that protects investors",
+      "distractors": ["A private bank", "A stock you can buy", "A mutual fund company"],
+      "explanation": "SEBI (Securities and Exchange Board of India) makes rules for markets, brokers and advisers. You can check if an adviser is registered on SEBI's website.",
+      "icon": "🛡️",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0020",
+      "question": "Why do you need to complete KYC before investing?",
+      "answer": "To verify your identity",
+      "distractors": ["To get free shares", "To pay less tax", "To choose your profit"],
+      "explanation": "KYC means Know Your Customer. It checks who you are, using documents like PAN and Aadhaar, to stop fraud.",
+      "icon": "🪪",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0021",
+      "question": "What is intraday trading?",
+      "answer": "Buying and selling the same stock on the same day",
+      "distractors": [
+        "Holding a stock for many years",
+        "Investing only on holidays",
+        "Buying shares in an IPO"
+      ],
+      "explanation": "Intraday traders close their trades before the market closes. It is fast and risky, and most beginners lose money.",
+      "icon": "🌗",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0022",
+      "question": "SEBI studied individual traders in F&O (futures and options). What did it find?",
+      "answer": "About 9 out of 10 lost money",
+      "distractors": [
+        "Most of them doubled their money",
+        "Nobody lost money",
+        "Half of them became rich"
+      ],
+      "explanation": "SEBI's studies found that around 9 out of 10 individual F&O traders made a net loss. F&O is very risky for beginners.",
+      "icon": "⚠️",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0023",
+      "question": "In F&O, what is a 'lot'?",
+      "answer": "The fixed minimum quantity in one contract",
+      "distractors": [
+        "A lucky number for trading",
+        "A group of brokers",
+        "The profit you must make"
+      ],
+      "explanation": "F&O contracts are traded in lots, not single shares. One lot can be worth a lot of money, so losses can be large too.",
+      "icon": "📦",
+      "difficulty": 3
+    },
+    {
+      "id": "term_0024",
+      "question": "₹1,000 grows by 10% every year. About how much is it after 2 years?",
+      "answer": "₹1,210",
+      "distractors": ["₹1,200", "₹1,100", "₹2,000"],
+      "explanation": "Year 1: ₹1,000 + 10% = ₹1,100. Year 2: ₹1,100 + 10% = ₹1,210. Growth on growth is called compounding.",
+      "icon": "🌱",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0025",
+      "question": "What does 'volatility' mean?",
+      "answer": "How much and how fast a price moves up and down",
+      "distractors": [
+        "How many shares a company has",
+        "The yearly profit of a company",
+        "The time the market opens"
+      ],
+      "explanation": "A highly volatile stock can rise or fall a lot in a short time. Higher volatility means higher risk.",
+      "icon": "🎢",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0026",
+      "question": "What does 'liquidity' mean for a stock?",
+      "answer": "How easily you can buy or sell it quickly",
+      "distractors": [
+        "How much water the company uses",
+        "How old the company is",
+        "How much dividend it pays"
+      ],
+      "explanation": "A liquid stock has many buyers and sellers. An illiquid stock can be hard to sell when you need money.",
+      "icon": "💧",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0027",
+      "question": "What is the 'expense ratio' of a mutual fund?",
+      "answer": "The yearly fee the fund charges, as a % of your money",
+      "distractors": [
+        "The profit the fund promises",
+        "The tax you pay on the fund",
+        "The number of shares in the fund"
+      ],
+      "explanation": "A lower expense ratio means more of the returns stay with you. Over many years, small fees add up.",
+      "icon": "🧾",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0028",
+      "question": "Why add a nominee to your demat account?",
+      "answer": "So your investments go to a person you chose if something happens to you",
+      "distractors": [
+        "To get a discount on brokerage",
+        "To let another person trade daily",
+        "To increase your profit"
+      ],
+      "explanation": "A nominee makes it easier for your family to receive your investments. It does not let them trade for you.",
+      "icon": "👨‍👩‍👧",
+      "difficulty": 1
+    },
+    {
+      "id": "term_0029",
+      "question": "What is an index fund?",
+      "answer": "A fund that copies an index like the Nifty 50",
+      "distractors": [
+        "A fund that buys one company only",
+        "A savings account in a bank",
+        "A fund that guarantees returns"
+      ],
+      "explanation": "An index fund holds the same companies as the index. It usually has low fees because no one picks stocks.",
+      "icon": "🪞",
+      "difficulty": 2
+    },
+    {
+      "id": "term_0030",
+      "question": "What is a stock's '52-week high'?",
+      "answer": "Its highest price in the last one year",
+      "distractors": [
+        "Its price 52 weeks from now",
+        "The best price ever",
+        "The price on the 52nd day of the year"
+      ],
+      "explanation": "There are 52 weeks in a year. The 52-week high and low show the price range over the last year.",
+      "icon": "📆",
+      "difficulty": 1
+    }
+  ]
+}

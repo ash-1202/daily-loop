@@ -1,0 +1,39 @@
+{
+  "dataset": "badges",
+  "name": "Badges",
+  "version": 1,
+  "items": [
+    {
+      "id": "first_step",
+      "name": "First Step",
+      "description": "Finish your first Market Daily 5.",
+      "icon": "👣",
+      "rule": { "type": "challenges_completed", "count": 1 },
+      "sort_order": 1
+    },
+    {
+      "id": "seven_day_learner",
+      "name": "7-Day Learner",
+      "description": "Keep a 7-day streak.",
+      "icon": "📚",
+      "rule": { "type": "streak", "days": 7 },
+      "sort_order": 2
+    },
+    {
+      "id": "scam_spotter",
+      "name": "Scam Spotter",
+      "description": "Answer 10 Scam or Safe cards correctly.",
+      "icon": "🛡️",
+      "rule": { "type": "correct_count", "task_type": "scam", "count": 10 },
+      "sort_order": 3
+    },
+    {
+      "id": "chart_reader",
+      "name": "Chart Reader",
+      "description": "Answer 10 chart cards correctly.",
+      "icon": "📈",
+      "rule": { "type": "correct_count", "task_type": "chart", "count": 10 },
+      "sort_order": 4
+    }
+  ]
+}

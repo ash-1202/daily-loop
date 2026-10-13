@@ -144,35 +144,46 @@ GitHub Actions (daily, 18:30 IST) → POST /internal/jobs/generate-challenges (s
 
 ---
 
-## Data model (first draft)
+## Data model
+
+The schema lives in plain SQL files in [`db/migrations/`](db/migrations), applied in order by a small
+runner (`npm run db:migrate`).
 
 ```
-users            id, display_name, timezone, created_at
-identities       id, user_id, type('device'|'email'|'phone'), value, verified_at
-                 UNIQUE(type, value)
-otp_codes        id, identity_type, value, code_hash, expires_at, attempts, used_at
-sessions         id, user_id, token_hash, expires_at, revoked_at
-datasets         id, name, version, source, content_hash, loaded_at
-tasks            id, dataset_id, type('term'|'scam'|'chart'), prompt, options(jsonb),
-                 answer(hidden), explanation, payload(jsonb), difficulty, language, active,
-                 source('dataset'|'generated'), created_at
-daily_challenges date UNIQUE, task_ids[5], bonus_multiplier, generated_at
-                 -- one row per day: 2 term, 2 scam, 1 chart; pre-generated 7 days ahead
-market_candles   symbol, date, open, high, low, close, volume, provider, fetched_at
-                 PRIMARY KEY(symbol, date)                         -- internal only, never sent to clients
-job_runs         id, job, started_at, finished_at, status, details(jsonb)   -- audit of each generation run
-submissions      id, user_id, task_id, challenge_date, answer, is_correct,
-                 idempotency_key UNIQUE, created_at
-points_ledger    id, user_id, delta, reason, ref_id, created_at   -- append-only
-streaks          user_id, current, longest, last_active_date, freezes_left
-badges           id, code, name, rule(jsonb), icon
-user_badges      user_id, badge_id, awarded_at
+-- 0001_users_and_auth.sql
+users                  id, display_name, timezone, created_at
+identities             id, user_id, type('device'|'email'|'phone'), value, verified_at   UNIQUE(type, value)
+otp_codes              id, identity_type, value, code_hash, expires_at, attempts, used_at
+sessions               id, user_id, token_hash UNIQUE, expires_at, revoked_at
+
+-- 0002_content.sql
+datasets               id, name, version, source, content_hash, item_count, loaded_at
+tasks                  id, dataset_id, type('term'|'scam'|'chart'), source('dataset'|'generated'),
+                       prompt, options(jsonb), answer, explanation, payload(jsonb), difficulty, active
+                       CHECK answer is one of options
+daily_challenges       date PK, bonus_multiplier, generated_at          -- one row per IST day
+daily_challenge_tasks  challenge_date, position(1-5), task_id           UNIQUE(challenge_date, task_id)
+
+-- 0003_gameplay.sql
+submissions            id, user_id, challenge_date, task_id, answer, is_correct, idempotency_key UNIQUE
+                       FK (challenge_date, task_id) -> daily_challenge_tasks;  UNIQUE(user_id, challenge_date, task_id)
+points_ledger          id, user_id, delta <> 0, reason, ref_id          UNIQUE(user_id, reason, ref_id); append-only trigger
+streaks                user_id PK, current, longest, last_active_date, freezes_left, freeze_week
+badges                 id, name, description, icon, rule(jsonb), sort_order
+user_badges            user_id, badge_id, awarded_at
+
+-- 0004_market_data_and_jobs.sql
+market_candles         symbol, date, open, high, low, close, volume, provider   -- internal only
+job_runs               id, job, status, started_at, finished_at, details(jsonb)
 ```
 
-Key ideas:
+Key ideas, **enforced by the database itself**, not only by application code (and covered by tests):
 
-- **The points ledger is the source of truth.** A balance is `SUM(delta)`. Rows are never edited or deleted, so every point can be traced.
-- **Idempotency keys** on submissions stop a retry on a weak network from rewarding twice.
+- **The points ledger is the source of truth.** A balance is `SUM(delta)`. A trigger rejects any
+  `UPDATE` or `DELETE`, so every point can be traced.
+- **Nothing is rewarded twice.** `UNIQUE(user_id, reason, ref_id)` on the ledger, even if code runs twice.
+- **One answer per card per day**, and **idempotency keys** make a retry on a weak network a no-op.
+- **A submission must be for a card in that day's challenge** (composite foreign key).
 - **One day boundary: midnight to midnight IST.** Challenges, streaks and leaderboard weeks (Monday to Sunday)
   all use India time, so "today's challenge" and "today's streak" can never disagree.
 - **Streak freezes** forgive a missed day, which matters for people with patchy connectivity.
@@ -185,19 +196,23 @@ Task content is kept in `datasets/` as JSON, versioned in git:
 
 ```
 datasets/
-├── terms.json           # id, question, options[], answer, explanation, icon
-├── scams.json           # id, message, is_scam, red_flags[], explanation
-├── chart_universe.json  # symbols the chart generator may use (e.g. NIFTY 50 tickers)
-└── charts_fallback.json # a few hand-made chart cards, used only if market data is unavailable
+├── terms.json    # 30 "Market word" cards: id, question, answer, distractors[], explanation, icon, difficulty
+├── scams.json    # 30 "Scam or Safe?" cards (20 scams, 10 safe): id, message, is_scam, red_flags[], explanation
+└── badges.json   # 4 badges: id, name, description, icon, rule
 ```
 
-Term and scam cards are hand-written. Chart cards are generated daily from Yahoo Finance (see above).
+Term and scam cards are hand-written in short, plain English. Chart cards are generated daily from
+Yahoo Finance (see above); `chart_universe.json` and `charts_fallback.json` arrive with that generator.
 
-1. Each item has a **stable ID** (e.g. `q_0001`).
-2. The seed script in `db/seed/` **validates** every file against the shared schemas.
-3. Items are **upserted** by ID and the file's `content_hash` is recorded, so re-seeding is always safe.
+How the seed works (`npm run db:seed`):
 
-Adding new content means editing a dataset file and re-running the seed. No code changes.
+1. Every file is **validated** against the schemas in `packages/shared` (plus rules such as unique IDs,
+   distractors different from the answer, red flags only on scams). **If any file is invalid, nothing is written.**
+2. Each item has a **stable ID** (e.g. `term_0001`) and is **upserted** by it.
+3. The file's **sha256** is stored in `datasets`; an unchanged file is skipped.
+4. An item removed from a file is **deactivated, not deleted**, because past answers still point to it.
+
+Adding content means editing a dataset file, running `npm run datasets:check`, then `npm run db:seed`. No code changes.
 
 ---
 
@@ -225,12 +240,16 @@ daily-loop/
 ├── apps/
 │   ├── web/          # frontend: React + Vite (screens only)
 │   └── api/          # backend: Node.js + Fastify REST API
+│       ├── src/
+│       │   ├── migrate.ts    # migration runner
+│       │   ├── seed/         # validate + load datasets into the DB
+│       │   └── scripts/      # CLI entry points: migrate, seed, reset, check datasets
+│       └── test/             # Vitest tests (datasets + database rules)
 ├── packages/
 │   └── shared/       # types, schemas, API client, hooks (no UI; reusable by React Native)
-├── datasets/         # versioned content (JSON/CSV)
+├── datasets/         # versioned content (JSON)
 ├── db/
-│   ├── migrations/   # SQL migrations
-│   └── seed/         # validate + load datasets into the DB
+│   └── migrations/   # numbered SQL migrations (0001_..., 0002_...)
 ├── docs/
 │   ├── brainstorm.md # thought process and decision log
 │   └── BUILD_LOG.md  # step-by-step build journal
@@ -258,6 +277,7 @@ cd daily-loop
 cp .env.example .env     # defaults work as-is
 npm install
 npm run db:up            # starts Postgres in Docker on port 5433
+npm run db:setup         # creates the tables and loads the datasets
 npm run dev              # starts the API (port 3000) and the web app (port 5173)
 ```
 
@@ -273,10 +293,16 @@ web app → API → database are all wired up.
 |---|---|
 | `npm run dev` | API + web app with live reload |
 | `npm run build` | Production build of the API (`apps/api/dist`) and web app (`apps/web/dist`) |
+| `npm test` | Tests (uses a separate `daily_loop_test` database, so needs `npm run db:up`) |
 | `npm run typecheck` | TypeScript checks for every workspace |
 | `npm run lint` | ESLint |
 | `npm run format` | Prettier |
 | `npm run db:up` / `npm run db:down` | Start / stop local Postgres |
+| `npm run db:setup` | `db:migrate` + `db:seed` |
+| `npm run db:migrate` | Apply new SQL migrations (safe to re-run) |
+| `npm run db:seed` | Validate datasets and load changed ones (safe to re-run) |
+| `npm run db:reset` | Wipe the **local** database, then migrate and seed (refuses non-local hosts) |
+| `npm run datasets:check` | Validate dataset files without a database |
 
 ### Health check
 

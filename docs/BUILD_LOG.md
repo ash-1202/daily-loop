@@ -19,6 +19,7 @@ Each entry follows the same template (see the end of this file).
 
 - [Step 0: Design and architecture](#step-0-design-and-architecture)
 - [Step 1: Monorepo setup](#step-1-monorepo-setup)
+- [Step 2: Database schema and datasets](#step-2-database-schema-and-datasets)
 
 ---
 
@@ -40,7 +41,7 @@ coding step below implements a part of that design rather than inventing it on t
 
 ## Step 1: Monorepo setup
 
-**Date:** 2026-10-13 · **Branch:** `feature/monorepo-setup`
+**Date:** 2026-10-13 · **Branch:** `feature/monorepo-setup` · **PR:** [#2](https://github.com/ash-1202/daily-loop/pull/2)
 
 ### Goal
 
@@ -258,6 +259,223 @@ server-only code can keep full Zod, since bundle size does not matter on the ser
 
 Step 2, `feature/db-and-datasets`: SQL migrations for every table, the seed script, and the first
 market-word and scam-or-safe datasets.
+
+---
+
+## Step 2: Database schema and datasets
+
+**Date:** 2026-10-13 · **Branch:** `feature/db-and-datasets`
+
+### Goal
+
+Turn the data model from the design into real Postgres tables, load the first content into them, and
+**prove with tests** that the rules protecting users' rewards are enforced by the database itself.
+
+### What was built
+
+```
+db/migrations/
+├── 0001_users_and_auth.sql        # users, identities, otp_codes, sessions
+├── 0002_content.sql               # datasets, tasks, daily_challenges, daily_challenge_tasks
+├── 0003_gameplay.sql              # submissions, points_ledger (+ append-only trigger), streaks, badges
+└── 0004_market_data_and_jobs.sql  # market_candles, job_runs
+datasets/
+├── terms.json                     # 30 "Market word" cards
+├── scams.json                     # 30 "Scam or Safe?" cards (20 scam, 10 safe)
+└── badges.json                    # 4 badges
+packages/shared/src/datasets.ts    # dataset schemas (zod/mini) + cross-item rule checks
+apps/api/
+├── src/
+│   ├── paths.ts                   # repoPath(): find files relative to the repo root
+│   ├── migrate.ts                 # the migration runner
+│   ├── seed/seed.ts               # validate + load datasets
+│   └── scripts/                   # CLI entry points
+│       ├── migrate.ts             #   npm run db:migrate
+│       ├── seed.ts                #   npm run db:seed
+│       ├── reset.ts               #   npm run db:reset (local only)
+│       └── check-datasets.ts      #   npm run datasets:check
+├── test/
+│   ├── global-setup.ts            # creates + migrates + seeds daily_loop_test once
+│   ├── test-db.ts                 # helpers: withRollback, expectPgError
+│   ├── datasets.test.ts           # dataset files and rule checks
+│   └── db-constraints.test.ts     # database rules
+├── vitest.config.ts
+└── tsup.config.ts                 # now also builds dist/migrate.js and dist/seed.js
+```
+
+### Commands that were run
+
+```bash
+git checkout main && git pull && git checkout -b feature/db-and-datasets
+
+# Vitest (see problem 1 for why npm 11 was used)
+npx -y npm@11 install                  # after adding "vitest" to apps/api devDependencies
+
+npm run datasets:check                 # validate the JSON files, no database needed
+npm run db:migrate                     # apply 0001..0004
+npm run db:migrate                     # again: "Nothing to do"
+npm run db:seed                        # 30 terms, 30 scams, 4 badges inserted
+npm run db:seed                        # again: "unchanged" for every file
+npm test                               # 18 tests
+npm run db:reset                       # wipe local DB, migrate, seed
+```
+
+### Key files explained
+
+**Migrations: numbered, plain SQL, never edited**
+
+Each file is one step in the schema's history. The runner (`apps/api/src/migrate.ts`, ~80 lines):
+
+1. Takes a Postgres **advisory lock**, so two processes starting at once (e.g. two deploys) don't both migrate.
+2. Creates `schema_migrations (name, checksum, applied_at)` if needed.
+3. For each `NNNN_name.sql` file in order: skips it if already applied, otherwise runs it **in its own
+   transaction** and records its **sha256 checksum**.
+4. If an applied file was **edited later**, it stops with an error. A schema change is always a new file,
+   so every database (yours, the test DB, production) goes through exactly the same steps.
+
+Why not an ORM or a migration library? Plain SQL is the most readable description of a schema, and
+the runner is small enough to read in a minute. That's a good trade for a project this size.
+
+**Rules enforced by the database (`0003_gameplay.sql`)**
+
+```sql
+CREATE TRIGGER points_ledger_append_only
+  BEFORE UPDATE OR DELETE ON points_ledger
+  FOR EACH ROW EXECUTE FUNCTION forbid_update_delete();
+```
+
+| Rule | How Postgres enforces it |
+|---|---|
+| Points history can't be edited | Trigger raises an error on `UPDATE` / `DELETE` |
+| Nothing is rewarded twice | `UNIQUE (user_id, reason, ref_id)` on `points_ledger` |
+| One answer per card per day | `UNIQUE (user_id, challenge_date, task_id)` on `submissions` |
+| A retry can't create a second answer | `idempotency_key UNIQUE` |
+| You can only answer today's cards | Composite FK `(challenge_date, task_id) → daily_challenge_tasks` |
+| A card always has its answer among its options | `CHECK (options ? answer)` (the jsonb `?` operator: "does this array contain this string?") |
+| At most 5 cards a day, none repeated | `CHECK (position BETWEEN 1 AND 5)`, `UNIQUE (challenge_date, task_id)` |
+
+Application code will still check these things to give friendly error messages, but if that code ever
+has a bug, the database refuses the bad write. For data that's worth real money, that is the safety net.
+
+**Why a join table instead of `task_ids[]`**
+
+The design said `daily_challenges.task_ids[5]`. Postgres **can't put a foreign key on array elements**,
+so an array could hold an ID that doesn't exist, or the same ID twice. `daily_challenge_tasks` has one
+row per card with real foreign keys, and it's what lets `submissions` reference "a card in that day's challenge".
+
+**Dataset format: `answer` + `distractors`**
+
+```json
+{ "id": "term_0001", "question": "What is a SIP?",
+  "answer": "Investing a fixed amount regularly, like every month",
+  "distractors": ["A one-time big investment", "A type of bank loan", "A government tax"], ... }
+```
+
+Writing `answer` separately from `distractors` means the file can't accidentally always put the right
+answer first; the options get shuffled when a day's challenge is built.
+
+**The seed: validate everything, then write**
+
+`seed.ts` loads **all** files first and validates each in two layers:
+
+1. **Schema** (`packages/shared/src/datasets.ts`): types, lengths, ID format such as `term_0001`.
+2. **Rules** (`findDatasetProblems`): duplicate IDs or questions, a distractor equal to the answer
+   (ignoring case and spaces), a scam with no red flags, a safe message with red flags.
+
+Only if every file passes does it write, one transaction per changed file:
+
+- The file's **sha256** is compared with `datasets.content_hash`; unchanged files are skipped.
+- Rows are **upserted** (`INSERT … ON CONFLICT (id) DO UPDATE`). `RETURNING (xmax = 0) AS inserted`
+  is a Postgres trick to tell whether each row was inserted (true) or updated (false), for the report.
+- Items no longer in the file are set `active = false`. They're never deleted, because past submissions point to them.
+
+**`db:reset` refuses anything that isn't local**
+
+It drops the whole schema, so it checks the host in `DATABASE_URL` and refuses unless it's
+`localhost`/`127.0.0.1`/`::1` and `NODE_ENV` isn't `production`.
+
+**Tests use their own database**
+
+`test/global-setup.ts` runs once: it creates `daily_loop_test` (next to `daily_loop`) if missing,
+wipes it, migrates and seeds. Each test then runs inside a transaction that's **always rolled back**
+(`withRollback`), so tests don't affect each other and dev data is never touched. To check that a
+statement fails, `expectPgError` wraps it in a **savepoint**, because after an error Postgres refuses
+every further query in that transaction until you roll back.
+
+### Concepts to learn from this step
+
+| Concept | In one line |
+|---|---|
+| Schema migrations | The database schema's version history, applied in order, never rewritten |
+| Advisory lock | An app-defined lock in Postgres, here "only one migrator at a time" |
+| Constraints as a safety net | `UNIQUE`, `CHECK`, `FOREIGN KEY` and triggers stop bad data even if the code has a bug |
+| Composite foreign key | A foreign key over several columns, e.g. "this (date, task) pair must exist in that table" |
+| Append-only table | History you can add to but never change: the basis of an auditable points ledger |
+| Upsert | `INSERT … ON CONFLICT DO UPDATE`: insert new rows, update existing ones, in one statement |
+| Idempotent scripts | Running twice has the same effect as running once (`migrate`, `seed`) |
+| Soft delete | Mark as inactive instead of deleting, so references stay valid |
+| Content hash | A fingerprint of a file, used to detect changes cheaply |
+| Savepoint | A point inside a transaction you can roll back to without losing the whole transaction |
+| Postgres error codes | `23505` unique, `23503` foreign key, `23514` check, `P0001` raised by a trigger |
+
+### Problems hit and how they were fixed
+
+**1. `npm install` crashed with "Cannot read properties of null (reading 'edgesOut')".**
+Adding Vitest made npm 10's dependency resolver crash. Vitest declares Vite as a *peer dependency*,
+and Vite lives in a different workspace (`apps/web`); npm 10 has a bug resolving that across workspaces.
+Installing at the root, or a clean reinstall, hit the same crash, and the clean reinstall left
+`node_modules` empty. Fix: run the install once with **npm 11** without changing the global npm:
+`npx -y npm@11 install`. Then confirmed that **npm 10 installs fine from the resulting lockfile**,
+so anyone cloning the repo with Node 22 / npm 10 is unaffected; only *adding* the package triggered the bug.
+*Lesson: read the stack trace (`buildIdealTree` → `loadPeerSet` pointed to peer resolution), and check
+the fix works with the tool version your users actually have.*
+
+npm 11 also printed that it **blocked esbuild's install script**: a new npm 11 safety default. The
+build still worked, because esbuild ships its binary as a platform package; the script only verifies it.
+
+**2. Lint: `preserve-caught-error`.**
+Two places caught an error and threw a new, friendlier one. ESLint 10 flags this because the original
+stack trace is lost. Fix: `new Error('friendly message', { cause: err })`.
+*Lesson: when wrapping an error, keep the original as `cause`.*
+
+**3. All 18 tests passed on the first run, which needed checking.**
+A test that can't fail proves nothing. One expected error code was deliberately changed
+(`P0001` → `23505`): the append-only test failed as it should, then passed again once restored.
+*Lesson: break a test on purpose at least once to see it go red.*
+
+**4. Prettier reformatted the dataset JSON, so the seed "updated" all 60 cards.**
+Not a bug: the file bytes changed, so the hash changed, so the seed re-applied the files. That showed the
+change detection and upsert path work. Content IDs and text were unchanged.
+
+**5. The web bundle grew by 3 KB with code it never uses.**
+Exporting the dataset schemas from `@daily-loop/shared` made the web bundle grow from 73.8 to 76.6 KB
+gzipped, even though the web app never imports them. A bundler can only drop unused code if it knows
+that loading a file has no **side effects**; `z.object(...)` at the top of a file *looks* like it might.
+Fix: `"sideEffects": false` in `packages/shared/package.json`, a promise that every file in the
+package is safe to drop when unused. Back to 73.8 KB, and the dataset code is gone from the bundle.
+*Lesson: check bundle size after adding shared code, and mark side-effect-free packages.*
+
+### How it was verified
+
+| Check | Result |
+|---|---|
+| `npm run datasets:check` | terms 30, scams 30, badges 4: all ok |
+| `npm run db:migrate` twice | 4 applied, then "Nothing to do" |
+| `npm run db:seed` twice | 30 + 30 inserted, 4 badges; then "unchanged" for all |
+| `npm test` | **18 passed**: datasets (7) and database rules (11) |
+| Break one test on purpose | It failed; restored, it passed |
+| Remove `term_0030` from the file, seed; restore, seed | `1 deactivated` → `active = f`; then `active = t` again |
+| `npm run db:reset` | Wiped, 4 migrations, seeded |
+| `db:reset` with a remote `DATABASE_URL` | **Refused** |
+| Built scripts `node apps/api/dist/migrate.js` / `seed.js` | Work (needed for production deploys) |
+| API `/api/health` after the reset | Still 200: the pool recovered by itself |
+| Web bundle after adding shared dataset code | 73.8 KB gzipped (unchanged), no dataset code inside |
+| `npm run lint` / `typecheck` / `format:check` | All pass |
+
+### What's next
+
+Step 3, `feature/challenge-api`: guest sessions, building a day's challenge, `GET /api/today`,
+`POST /api/submissions`, and awarding points, streaks and badges through the ledger.
 
 ---
 
