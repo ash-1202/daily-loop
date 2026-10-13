@@ -79,9 +79,25 @@ jobs:
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
         # The key can only run "deploy <sha>" on the server (forced command); nothing else.
+        #
+        # Internet bots keep many half-open SSH connections to the droplet, and sshd then drops
+        # some new connections at random (MaxStartups). ssh exits with 255 on connection errors,
+        # so those are retried. Retrying is safe: deploying the same sha again changes nothing,
+        # and the server-side lock prevents two deploys from overlapping.
         run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            "deploy@${DEPLOY_HOST}" "deploy ${GITHUB_SHA}"
+          for attempt in 1 2 3 4 5; do
+            set +e
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=20 -o ServerAliveInterval=15 \
+              "deploy@${DEPLOY_HOST}" "deploy ${GITHUB_SHA}"
+            status=$?
+            set -e
+            [ "$status" -ne 255 ] && exit "$status"
+            echo "::warning::SSH connection failed (attempt $attempt), retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
+          echo "::error::Could not connect to the droplet over SSH"
+          exit 1
 
       - name: Verify the public site serves this commit
         run: |
