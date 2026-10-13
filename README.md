@@ -2,8 +2,10 @@
 
 A lightweight, mobile-first web app built around a short daily task with streaks, points and badges. Rewards are checked on the server and question sets are versioned and loaded into Postgres.
 
-> **Status:** in development. The game is playable end to end in the browser: guest start, 5 daily
-> cards, points, streaks, badges and a weekly leaderboard. Chart cards, email login and deployment come next.
+> **Live:** **https://daily5.tradertrix.com** (open it on a phone). Deployed automatically on every merge to `main`.
+>
+> **Status:** playable end to end: guest start, 5 daily cards, points, streaks, badges and a weekly
+> leaderboard. Chart cards and email login come next.
 >
 > - **Why** things are built this way: [docs/brainstorm.md](docs/brainstorm.md) (decisions and reasoning)
 > - **How** the code was built, step by step: [docs/BUILD_LOG.md](docs/BUILD_LOG.md) (learning journal)
@@ -100,14 +102,15 @@ flowchart LR
 | Layer | Choice | Why |
 |---|---|---|
 | Frontend | React + Vite, PWA, TypeScript | Offline support, installable on Android, and a path to a React Native app |
-| Backend | Node.js + Fastify, TypeScript | I/O-bound workload, shared types with the frontend, fast cold starts on free tiers |
-| Database | Postgres (Neon or Supabase free tier) | Reliable transactions for rewards; free hosting |
-| Hosting | Cloudflare Pages / Vercel (web), Render / Fly.io (API) | Free tiers, simple deploys |
+| Backend | Node.js + Fastify, TypeScript | I/O-bound workload, shared types with the frontend, small memory footprint |
+| Database | Postgres 16 | Reliable transactions and constraints for rewards |
+| Hosting | One Docker image (API + web) on a DigitalOcean droplet in Bangalore, behind Caddy (HTTPS) | Always on (no free-tier sleep), close to Indian users, one domain |
+| CI/CD | GitHub Actions → GHCR → SSH deploy with automatic rollback | Every merge to `main` is tested, built and shipped (see [Deployment](#deployment)) |
 
 **Why Node.js, not Java?** Java was considered with future scale in mind, but at this app's scale
 the limit is the architecture, not the language. Node handles small JSON reads and writes very well,
-shares types with the frontend, and wakes up in about a second on free hosting (a Java app can take
-5 to 15 seconds, which means a blank screen on a phone).
+shares types with the frontend, starts in about a second, and runs in ~30 MB of RAM, which matters on
+a small shared server (a Spring Boot app typically needs 300+ MB and several seconds to start).
 
 **How it scales later:** the API is stateless, so we run more instances; Postgres gets connection
 pooling and read replicas; the leaderboard moves to Redis; background work (badges, daily challenge
@@ -361,6 +364,40 @@ Wi-Fi via the Network URL Vite prints). You start as a guest and see today's fir
 
 `GET /api/health` returns `200` with `{ "ok": true, "db": "up" }`, or `503` with `"db": "down"` if
 the API is running but cannot reach the database.
+
+## Deployment
+
+**Live at https://daily5.tradertrix.com.** Full runbook: [deploy/README.md](deploy/README.md).
+
+```
+merge to main ─► GitHub Actions
+                   1. checks: format, lint, typecheck, datasets, 66 tests (real Postgres), build
+                   2. docker build ─► ghcr.io/ash-1202/daily-loop:<commit sha>
+                   3. ssh deploy@droplet "deploy <sha>"  ── forced command, can run nothing else
+                        └─ pull → migrate → seed → restart app → wait healthy → check version
+                           └─ unhealthy? previous version is started again, the job fails
+                   4. https://daily5.tradertrix.com/api/health must report <sha>
+```
+
+| Piece | Choice |
+|---|---|
+| Server | DigitalOcean droplet in **Bangalore** (2 GB RAM), shared with another product (ChaiHouse) |
+| Image | One multi-stage Docker image: API + built web app, non-root, ~35 MB on top of `node:22-alpine` |
+| HTTPS | The server's existing Caddy: automatic Let's Encrypt certificate, HSTS, gzip |
+| Database | Postgres 16 container with its own volume; nightly `pg_dump`, kept 14 days |
+| Isolation | Separate compose project; memory caps (app 256 MB, db 200 MB); killed before the other product under memory pressure; unique container names on the shared network; no public ports |
+| CI access | SSH key restricted to one command (`deploy <40-hex sha>`), no shell, no port forwarding; one sudo rule |
+| Rollback | Automatic on a failed health check; manual: `deploy-daily-loop $(cat previous_tag)` |
+
+Pull requests run the same checks plus a Docker build ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+
+To build the production image locally:
+
+```bash
+docker build --build-arg APP_VERSION=$(git rev-parse HEAD) -t daily-loop .
+```
+
+---
 
 ## Use of AI tools
 

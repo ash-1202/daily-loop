@@ -109,7 +109,8 @@ service** from Yahoo Finance data (see 2b). No data from any other personal proj
 - **Frontend:** React + Vite, PWA (service worker), TypeScript.
 - **Backend:** Node.js + Fastify, TypeScript (types shared via `packages/shared`).
 - **Database:** Postgres on a free tier (Neon or Supabase).
-- **Hosting:** web on Cloudflare Pages or Vercel; API on Render or Fly.io.
+- **Hosting:** ~~web on Cloudflare Pages or Vercel; API on Render or Fly.io~~. **Changed 2026-10-14:**
+  one Docker image on an existing DigitalOcean droplet in Bangalore, behind Caddy (see 2c).
 
 ### Why Node.js (and not Java) for the backend
 
@@ -121,7 +122,7 @@ writes against Postgres), which Node handles very well.
 |---|---|---|
 | Fits the 4 to 6 hour budget | ✅ Little boilerplate | ⚠️ More setup and ceremony |
 | Shared types with the frontend | ✅ One `packages/shared` | ❌ Duplicated or generated |
-| Free tier (512 MB, sleeps when idle) | ✅ ~50 to 100 MB, ~1 s cold start | ⚠️ ~300 to 500 MB, 5 to 15 s cold start |
+| Free tier (512 MB, sleeps when idle) | ✅ ~50 to 100 MB, ~1 s process start | ⚠️ ~300 to 500 MB, 5 to 15 s process start |
 | First load when opened on a phone | ✅ Fast, even after sleeping | ❌ Risk of a blank screen |
 | Heavy CPU work at very large scale | OK | ✅ Stronger |
 
@@ -256,6 +257,39 @@ Free-tier servers sleep when idle, so an in-process cron (e.g. `node-cron`) cann
   e.g. **18:30 IST**, after the market closes at 15:30. The request wakes the server.
 - The endpoint is protected by a secret header (`X-Job-Secret`) stored as a GitHub Actions secret.
 - At scale this moves to a proper job queue/worker (see "How it scales later").
+
+---
+
+## 2c. Deployment (decided 2026-10-14)
+
+**Correction to the stack section above:** it claimed free hosts like Render would "cold start in about a
+second" for Node. That was wrong. Node *starts* in about a second, but Render's free tier puts the whole
+service to sleep after 15 minutes idle and **waking it takes 30 to 60 seconds**: a blank screen for a
+reviewer opening the link on a phone. That ruled out free sleeping tiers.
+
+**Options considered**
+
+| Option | Verdict |
+|---|---|
+| Render free (web + API) | ❌ 30–60 s wake-up after 15 min idle |
+| Vercel (web + Fastify function) + Neon | ✅ viable, ₹0, one domain; not chosen because an always-on server was available |
+| Another existing droplet | ❌ dedicated to a different, sensitive workload with only 1 GB RAM and no Docker; better kept isolated |
+| **The ChaiHouse droplet** (Bangalore, 2 GB, Docker + Caddy + GHCR already) | ✅ **chosen**: always on, close to users, same proven pattern, enough spare RAM |
+
+**How it shares the server safely**
+
+- Separate compose project in `/opt/daily-loop`; deploys never restart ChaiHouse containers.
+- Memory caps (app 256 MB, db 200 MB) and `oom_score_adj: 800` vs ChaiHouse's 500: daily-loop is
+  killed first if memory ever runs out. Measured use: ~51 MB.
+- **Every service name unique across both projects** (`daily-loop-app`, `daily-loop-db`): the app is on
+  ChaiHouse's network so Caddy can reach it, and Docker DNS answers names from all of a container's
+  networks. A service called `db` resolved to ChaiHouse's Postgres on the first deploy (see build log).
+- No public ports; HTTPS by ChaiHouse's Caddy (one added site block, validated before reload).
+- CI's SSH key can run exactly `deploy <40-hex sha>`: `restrict` + forced command + one sudo rule.
+
+**Pipeline:** PR → CI (checks + Docker build). Merge to `main` → checks → image to GHCR tagged with the
+commit → SSH deploy → server pulls, migrates, seeds, restarts the app, waits for health, **rolls back**
+on failure → workflow checks the public URL reports the new commit.
 
 ---
 
@@ -402,6 +436,14 @@ POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates 
 | 2026-10-13 | `crypto.getRandomValues` instead of `crypto.randomUUID` for IDs | `randomUUID` only exists on HTTPS/localhost; testing on a phone over local Wi-Fi uses plain http |
 | 2026-10-13 | Web manifest now, service worker later | "Add to home screen" works today; offline caching is a separate, riskier change |
 | 2026-10-13 | `useGame` stays in the web app for now, not `packages/shared` | Shared code has no React dependency; when a React Native app exists, the hook can move as-is |
+| 2026-10-14 | Deploy to the ChaiHouse droplet (not Vercel/Render, not the other droplet) | Always on, Bangalore, Docker/Caddy/GHCR already in place; the other droplet's workload stays isolated |
+| 2026-10-14 | One Docker image serves API + web; Fastify serves the static files | One domain: first-party cookies, no CORS; one thing to deploy and roll back |
+| 2026-10-14 | Image built in CI, server only pulls (tag = commit sha) | A 1 vCPU server never compiles; every running version maps to a commit |
+| 2026-10-14 | Restricted deploy user: `restrict` + forced command + single sudo rule | A leaked CI key can only redeploy published images, not open a shell on a shared server |
+| 2026-10-14 | Deploy script rolls back automatically; migrations stay additive | A bad release never stays live; the previous version still works with the newer schema |
+| 2026-10-14 | Unique service names (`daily-loop-app`, `daily-loop-db`) on the shared network | Docker DNS resolved `db` to ChaiHouse's Postgres on the first deploy |
+| 2026-10-14 | Retry SSH on connection errors in the workflow | Bots fill sshd's unauthenticated slots (MaxStartups), so it drops some new connections |
+| 2026-10-14 | Postgres on the droplet (own container + nightly pg_dump), not Neon | Same pattern as ChaiHouse, lowest latency, no extra account |
 
 ---
 
@@ -422,3 +464,6 @@ Keep this updated for the explainer.
   leaderboard) and its 59 tests, including concurrency tests verified by removing the lock they protect.
 - 2026-10-13: Claude built the web screens (Today, Done, Leaders, Me), the game-state hook and styles,
   and tested them in a phone-sized browser, including a simulated network failure and retry.
+- 2026-10-14: Claude analysed hosting options and the droplets (read-only first), wrote the Dockerfile,
+  production compose, deploy/rollback/backup scripts, SSH gate and CI/CD workflows, tested them in a
+  local droplet simulation, set up the server with the user's approval, and diagnosed the first deploy failure.
