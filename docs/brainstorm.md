@@ -393,6 +393,15 @@ POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates 
 | 2026-10-13 | All timestamps written by the app (ledger, submissions) come from the injected clock, not `now()` in SQL | One source of time, so "this week's points" and streaks agree in tests and in production |
 | 2026-10-13 | `pg` returns DATE columns as 'YYYY-MM-DD' strings | A JS Date is midnight in the server's timezone and can shift the day |
 | 2026-10-13 | Session cookie: random 256-bit token, only its SHA-256 stored, httpOnly + SameSite=Lax (+ Secure in production), 180 days | A database leak doesn't leak working sessions; JavaScript can't read the cookie |
+| 2026-10-13 | Build the game screens before the chart generator | A playable app on a phone matters most to reviewers; chart cards slot in later without UI changes |
+| 2026-10-13 | No UI, router or state libraries: React + plain CSS, tab state in `useState`, one `useGame` hook | Smallest bundle for low-end phones (80 KB JS gzipped in total); the app has 3 tabs and needs nothing more |
+| 2026-10-13 | One card per screen; result stays on screen with "Why?" until the user taps Next | Short sessions, nothing to scroll past, and every answer teaches something |
+| 2026-10-13 | Scam/Safe buttons show icon + word (🚩 Scam / ✅ Safe); right/wrong shown with colour **and** ✓/✗ | Works for readers of any language level and for colour-blind users |
+| 2026-10-13 | Failed answer → "Try again" resends the same request (same idempotency key) | Retrying on bad mobile data can never double-count |
+| 2026-10-13 | Device token in localStorage, with an in-memory fallback | Private mode or blocked storage still works for the visit; the session cookie carries the account |
+| 2026-10-13 | `crypto.getRandomValues` instead of `crypto.randomUUID` for IDs | `randomUUID` only exists on HTTPS/localhost; testing on a phone over local Wi-Fi uses plain http |
+| 2026-10-13 | Web manifest now, service worker later | "Add to home screen" works today; offline caching is a separate, riskier change |
+| 2026-10-13 | `useGame` stays in the web app for now, not `packages/shared` | Shared code has no React dependency; when a React Native app exists, the hook can move as-is |
 
 ---
 
@@ -411,3 +420,5 @@ Keep this updated for the explainer.
   the first 30 market-word and 30 scam-or-safe cards (content to be reviewed by a human for accuracy and tone).
 - 2026-10-13: Claude wrote the challenge API (sessions, challenge builder, scoring, streaks, badges,
   leaderboard) and its 59 tests, including concurrency tests verified by removing the lock they protect.
+- 2026-10-13: Claude built the web screens (Today, Done, Leaders, Me), the game-state hook and styles,
+  and tested them in a phone-sized browser, including a simulated network failure and retry.
