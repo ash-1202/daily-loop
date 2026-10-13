@@ -220,23 +220,64 @@ POST /internal/jobs/generate-challenges   (X-Job-Secret header) pre-generates th
 ```
 daily-loop/
 ├── apps/
-│   ├── web/          # frontend (PWA)
-│   └── api/          # backend (REST API)
+│   ├── web/          # frontend: React + Vite (screens only)
+│   └── api/          # backend: Node.js + Fastify REST API
 ├── packages/
 │   └── shared/       # types, schemas, API client, hooks (no UI; reusable by React Native)
 ├── datasets/         # versioned content (JSON/CSV)
 ├── db/
 │   ├── migrations/   # SQL migrations
 │   └── seed/         # validate + load datasets into the DB
-└── docs/
-    └── brainstorm.md # thought process and decision log
+├── docs/
+│   └── brainstorm.md # thought process and decision log
+├── docker-compose.yml  # local Postgres
+└── package.json        # npm workspaces + root scripts
 ```
+
+It is a **monorepo using npm workspaces** (built into npm, no extra tooling). One `npm install` at the
+root installs everything, and `apps/api` and `apps/web` import `@daily-loop/shared` directly.
 
 ---
 
 ## Getting started
 
-_Coming soon._ Setup steps will be added once the first version of the app and API is in place.
+### Prerequisites
+
+- **Node.js 20.19+** (22 recommended, see `.nvmrc`)
+- **Docker** (for the local Postgres database)
+
+### Run it locally
+
+```bash
+git clone https://github.com/ash-1202/daily-loop.git
+cd daily-loop
+cp .env.example .env     # defaults work as-is
+npm install
+npm run db:up            # starts Postgres in Docker on port 5433
+npm run dev              # starts the API (port 3000) and the web app (port 5173)
+```
+
+Open **http://localhost:5173**. You should see **✅ Connected**, which means
+web app → API → database are all wired up.
+
+> Postgres runs on host port **5433** (not the default 5432) so it does not clash with a Postgres
+> already installed on your machine.
+
+### Useful commands
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | API + web app with live reload |
+| `npm run build` | Production build of the API (`apps/api/dist`) and web app (`apps/web/dist`) |
+| `npm run typecheck` | TypeScript checks for every workspace |
+| `npm run lint` | ESLint |
+| `npm run format` | Prettier |
+| `npm run db:up` / `npm run db:down` | Start / stop local Postgres |
+
+### Health check
+
+`GET /api/health` returns `200` with `{ "ok": true, "db": "up" }`, or `503` with `"db": "down"` if
+the API is running but cannot reach the database.
 
 ## Use of AI tools
 
