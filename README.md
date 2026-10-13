@@ -2,7 +2,8 @@
 
 A lightweight, mobile-first web app built around a short daily task with streaks, points and badges. Rewards are checked on the server and question sets are versioned and loaded into Postgres.
 
-> **Status:** in development. Monorepo, API and web app are set up; features are being added step by step.
+> **Status:** in development. The game API (sessions, daily challenge, scoring, streaks, badges,
+> leaderboard) works and is tested; the game screens, chart cards and email login come next.
 >
 > - **Why** things are built this way: [docs/brainstorm.md](docs/brainstorm.md) (decisions and reasoning)
 > - **How** the code was built, step by step: [docs/BUILD_LOG.md](docs/BUILD_LOG.md) (learning journal)
@@ -216,20 +217,43 @@ Adding content means editing a dataset file, running `npm run datasets:check`, t
 
 ---
 
-## API (draft)
+## API
 
-```
-POST /api/session            create or restore a guest user (device token) -> session cookie
-POST /api/auth/otp/request   { email } -> sends a 6-digit OTP (rate-limited)
-POST /api/auth/otp/verify    { email, code } -> links the email to the current user
-POST /api/auth/logout        revokes the session
-GET  /api/today              today's challenge (no answers)
-POST /api/submissions        { taskId, answer, idempotencyKey } -> result + rewards
-GET  /api/me                 points balance, streak, badges
-GET  /api/leaderboard?week=  top N + my rank
+Request and response shapes are defined once in [`packages/shared/src/api.ts`](packages/shared/src/api.ts)
+and used by both the API (to validate requests) and the typed client (to validate responses).
 
-POST /internal/jobs/generate-challenges   (X-Job-Secret header) pre-generates the next 7 days
-```
+| Endpoint | Status | What it does |
+|---|---|---|
+| `GET /api/health` | ✅ | API and database status |
+| `POST /api/session` | ✅ | `{ deviceToken }` → finds or creates the guest user, sets an httpOnly session cookie |
+| `GET /api/today` | ✅ | Today's 5 cards (IST). Answers and explanations only on cards already answered |
+| `POST /api/submissions` | ✅ | `{ challengeDate, taskId, answer, idempotencyKey }` → result, rewards, new badges, streak, total |
+| `GET /api/me` | ✅ | Points, streak, all badges (earned or not) |
+| `PATCH /api/me` | ✅ | `{ displayName }` for the leaderboard (2–20 letters, digits, spaces) |
+| `GET /api/leaderboard` | ✅ | This week's top 10 (Monday to Sunday, IST) + your rank |
+| `POST /api/auth/otp/request`, `/verify`, `/logout` | ⏳ | Email OTP login (step 6) |
+| `POST /internal/jobs/generate-challenges` | ⏳ | Pre-generate the next 7 days (step 4) |
+
+Errors always look like `{ "error": { "code": "already_answered", "message": "…" } }`:
+
+| Status | Codes |
+|---|---|
+| 400 | `invalid_request`, `invalid_answer`, `challenge_closed` |
+| 401 | `not_signed_in` |
+| 404 | `card_not_found` |
+| 409 | `already_answered`, `idempotency_key_reused` |
+
+**How a submission is scored** (all in one database transaction, see
+[`services/submissions.ts`](apps/api/src/services/submissions.ts)):
+
+1. A repeated `idempotencyKey` returns the original result with `replayed: true` and no new rewards.
+2. The card must be in that day's challenge, not answered yet, and the answer must be one of its options.
+   Yesterday's challenge stays open for 15 minutes after midnight IST.
+3. Correct answer: **+10**. Fifth card answered: **+5** daily bonus and the streak updates.
+4. Badges whose rule is now met are awarded.
+
+Each user's submissions are processed one at a time (a Postgres advisory lock), so answering several
+cards at once, or double-tapping, can never pay the daily bonus twice or skip it.
 
 ---
 
@@ -241,10 +265,14 @@ daily-loop/
 │   ├── web/          # frontend: React + Vite (screens only)
 │   └── api/          # backend: Node.js + Fastify REST API
 │       ├── src/
+│       │   ├── app.ts        # builds the Fastify app (deps: pool + clock), auth hook, error format
+│       │   ├── routes/       # HTTP endpoints: thin, validate input and call services
+│       │   ├── services/     # game logic: challenges, submissions, streaks, badges, sessions
+│       │   ├── lib/          # small helpers: db transactions/locks, crypto, shuffle, errors
 │       │   ├── migrate.ts    # migration runner
 │       │   ├── seed/         # validate + load datasets into the DB
 │       │   └── scripts/      # CLI entry points: migrate, seed, reset, check datasets
-│       └── test/             # Vitest tests (datasets + database rules)
+│       └── test/             # Vitest: rules (pure), API (via app.inject), database rules
 ├── packages/
 │   └── shared/       # types, schemas, API client, hooks (no UI; reusable by React Native)
 ├── datasets/         # versioned content (JSON)

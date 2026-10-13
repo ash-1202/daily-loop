@@ -20,6 +20,7 @@ Each entry follows the same template (see the end of this file).
 - [Step 0: Design and architecture](#step-0-design-and-architecture)
 - [Step 1: Monorepo setup](#step-1-monorepo-setup)
 - [Step 2: Database schema and datasets](#step-2-database-schema-and-datasets)
+- [Step 3: Challenge API](#step-3-challenge-api)
 
 ---
 
@@ -264,7 +265,7 @@ market-word and scam-or-safe datasets.
 
 ## Step 2: Database schema and datasets
 
-**Date:** 2026-10-13 · **Branch:** `feature/db-and-datasets`
+**Date:** 2026-10-13 · **Branch:** `feature/db-and-datasets` · **PR:** [#3](https://github.com/ash-1202/daily-loop/pull/3)
 
 ### Goal
 
@@ -476,6 +477,223 @@ package is safe to drop when unused. Back to 73.8 KB, and the dataset code is go
 
 Step 3, `feature/challenge-api`: guest sessions, building a day's challenge, `GET /api/today`,
 `POST /api/submissions`, and awarding points, streaks and badges through the ledger.
+
+---
+
+## Step 3: Challenge API
+
+**Date:** 2026-10-13 · **Branch:** `feature/challenge-api`
+
+### Goal
+
+Make the game playable through the API: a guest can start a session, get today's 5 cards, answer them,
+and receive points, a daily bonus, a streak and badges, with every rule enforced on the server and
+safe against retries, double taps and simultaneous requests.
+
+### What was built
+
+```
+packages/shared/src/
+├── api.ts          # request/response schemas for every endpoint (one source of truth)
+├── api-client.ts   # typed client: createSession, today, submit, me, updateMe, leaderboard; ApiError
+├── game.ts         # rules both sides need: 5 cards, daily mix, +10 / +5 points, 1 freeze a week
+└── time.ts         # IST dates: istDate, istDayStart, addDays, daysBetween, weekStart
+apps/api/src/
+├── app.ts          # buildApp({ pool, clock }), cookie plugin, auth hook, one error format
+├── server.ts       # passes the real pool and clock
+├── lib/
+│   ├── db-utils.ts # withTransaction, lockKey (advisory lock), DATE parser, isDbUp
+│   ├── crypto.ts   # randomToken, sha256
+│   ├── shuffle.ts  # seededShuffle
+│   └── http-error.ts # HttpError, parseBody (validate with shared schemas)
+├── services/
+│   ├── sessions.ts    # guest users via device token; session cookies
+│   ├── challenges.ts  # build a day (least recently used cards), cards without answers
+│   ├── submissions.ts # score an answer and apply every reward, in one transaction
+│   ├── streaks.ts     # pure streak rules (freeze, reset, what to display)
+│   ├── badges.ts      # evaluate badge rules, award new ones
+│   └── users.ts       # points total, streak load/save, display names
+└── routes/            # session, today, submissions, me, leaderboard, health
+apps/api/test/
+├── rules.test.ts      # pure rules: IST dates, answer window, streaks, shuffle, badge rules
+├── api.test.ts        # the API end to end through app.inject, with a fake clock
+└── api-helpers.ts     # createTestApp, signIn, playDay, resetGameData
+```
+
+### Commands that were run
+
+```bash
+git checkout main && git pull && git checkout -b feature/challenge-api
+npm install @fastify/cookie -w @daily-loop/api
+
+# Manual smoke test against the dev server, keeping cookies in a jar like a browser
+curl -c jar.txt -b jar.txt -X POST localhost:3000/api/session \
+  -H 'content-type: application/json' -d '{"deviceToken":"…32+ chars…"}'
+curl -b jar.txt localhost:3000/api/today
+bash smoke-day.sh jar.txt        # answers all 5 cards, then a retry and a double answer
+
+npm test                          # 59 tests
+```
+
+### Key files explained
+
+**Routes are thin; services hold the logic**
+
+A route only checks who you are (`requireUser`), validates the body with a shared schema
+(`parseBody`), and calls a service. For example `routes/submissions.ts` is 10 lines; all scoring lives
+in `services/submissions.ts`. Services take a database handle and a time, so they're easy to test.
+
+**`buildApp({ pool, clock })`: dependency injection without a framework**
+
+The app no longer imports the database or calls `new Date()` itself. `server.ts` passes the real pool
+and `() => new Date()`; tests pass the test database and a clock they can move:
+
+```ts
+const app = createTestApp(pool);          // starts Wednesday 14 Oct, 12:00 IST
+app.setNow(new Date('2026-10-14T18:40:00Z'));  // 00:10 IST on the 15th
+```
+
+That's how the tests cover midnight, missed days, a new week and the 15-minute grace period in milliseconds.
+Every timestamp the app writes (ledger, submissions) also comes from this clock, so "this week" means
+the same thing everywhere.
+
+**Guest sessions (`services/sessions.ts`)**
+
+1. The app creates a random **device token** once and keeps it on the device.
+2. `POST /api/session` hashes it and looks for a `device` identity. Found → that user; not found → a new user.
+3. The response sets a cookie holding a different random **session token**; only its SHA-256 is stored.
+   The cookie is `httpOnly` (JavaScript can't read it), `SameSite=Lax`, and `Secure` in production.
+4. If the device token is unknown but the request already has a valid session (the app's storage was
+   cleared), the new token is **linked to the existing user**, so progress isn't lost.
+
+An advisory lock on the device hash stops two simultaneous first launches from creating two users.
+
+**Building a day (`ensureChallenge`)**
+
+For each slot in `['term', 'scam', 'term', 'scam', 'chart']`, pick the active card of that type that was
+used **least recently** (never-used first, ties random). The chart slot falls back to a term until chart
+cards exist. A lock on the date means simultaneous first requests build the day once. It runs on the first
+`GET /api/today` of the day; the scheduled job in step 4 will build days in advance.
+
+**Never leak the answer (`toCard`)**
+
+The database row has the answer, explanation and red flags. `toCard` copies them into the response
+**only if this user has answered the card**. A test checks the raw JSON of unanswered cards contains none
+of them. Options are shuffled with `seededShuffle(options, date + card id)`: the same order for everyone
+and on reload, but the right answer isn't always first. Scam/Safe keeps a fixed order so the buttons
+don't swap places.
+
+**Scoring an answer (`submitAnswer`)**, in one transaction:
+
+```
+lock this user  →  same idempotency key seen?  → return original result, replayed: true
+                →  date open? card in that day? not answered yet? answer is an option?
+                →  insert submission
+                →  correct: +10 (ledger)
+                →  5th card: +5 bonus (ledger), update streak
+                →  award badges whose rule is now met
+```
+
+The ledger inserts use `ON CONFLICT DO NOTHING RETURNING id`, so a reward is reported to the user only
+if it was really written, and the database's unique keys remain the final guard.
+
+**Streak rules (`services/streaks.ts`): pure functions**
+
+`recordCompletion(state, date)` returns the new state; `streakView(state, today)` returns what to show.
+No database, no clock, so the 7 streak tests run in milliseconds:
+
+| Situation | Result |
+|---|---|
+| Completed yesterday too | +1 |
+| Missed exactly one day, freeze available | +1, freeze used |
+| Missed one day, freeze already used this week | back to 1 |
+| Missed two days or more | back to 1 |
+| New Monday | freeze refills |
+| Today, last streak day was 2 days ago and a freeze is left | shown with `atRisk: true` |
+| Streak can no longer be saved | shown as 0 (longest is kept) |
+
+**IST dates without a date library (`shared/src/time.ts`)**
+
+`Intl.DateTimeFormat` with `timeZone: 'Asia/Kolkata'` gives the IST calendar date of any instant.
+After that, dates are plain `'YYYY-MM-DD'` strings: they sort correctly, compare with `===`, and
+`addDays` / `weekStart` work in UTC so no local timezone can shift them.
+
+### Concepts to learn from this step
+
+| Concept | In one line |
+|---|---|
+| Dependency injection | Pass in what code needs (database, clock) instead of importing it, so tests can swap it |
+| Fake clock | Control "now" in tests to cover midnight, next week, grace periods instantly |
+| Session cookie | A random token in an httpOnly cookie; the server stores only its hash |
+| Idempotency key | A client-chosen ID per action, so a retry returns the first result instead of acting twice |
+| Advisory lock | Serialise work per key (user, date, device) inside Postgres, without locking tables |
+| Race condition | Two requests reading the same state before either writes; fixed here with a lock |
+| Pure functions | Rules with no I/O (streaks, shuffle, badge rules) are the easiest code to test |
+| Thin routes, fat services | HTTP details in routes; business rules in services |
+| Information hiding | Answers stay on the server until the user commits to an answer |
+| Seeded randomness | Looks random, but the same input always gives the same output |
+| Testing through HTTP | `app.inject()` sends real requests to the app without opening a port |
+
+### Problems hit and how they were fixed
+
+**1. TypeScript: "'rows' implicitly has type 'any'… referenced in its own initializer".**
+The first `ensureChallenge` used a `while` loop where the type being searched changed inside the loop
+(chart → term). TypeScript couldn't infer it. Rewritten as a helper `pickLeastRecentlyUsed()` and a
+list of candidate types per slot (`chart: ['chart', 'term']`), which also reads more clearly.
+
+**2. The smoke-test loop answered nothing.**
+In zsh, `for T in $IDS` doesn't split a string into words (bash does), so the loop ran once with all
+five IDs as one value. The test script was rewritten for bash (`#!/usr/bin/env bash`, `read -a`).
+*Lesson: when a script misbehaves, check which shell runs it.*
+
+**3. Five old database tests failed after the new API tests were added.**
+The API tests leave rows behind, and the database-rule tests then tried to create the same challenge
+date. Fix: every API test starts with `resetGameData()` (a `TRUNCATE … CASCADE`, which doesn't fire the
+ledger's row trigger), the API test file empties the database when it finishes, and the database-rule
+file empties it before starting. Test files now run one at a time (`fileParallelism: false`) because they
+share one database. *Lesson: tests sharing state must clean up, before and after.*
+
+**4. The streak test was wrong, not the code.**
+The test expected the streak to be 0 on "day 5", but day 5 after Wednesday 14 Oct is **Monday 19 Oct**,
+a new week, so the freeze had refilled and the streak was correctly still alive. The test now checks
+Monday (alive, at risk, freeze available) and Tuesday (gone). *Lesson: when a test fails, check the
+test's assumptions before changing the code.*
+
+**5. Proving the concurrency tests work.**
+All tests passed, so the per-user lock was removed on purpose and the concurrency tests were rerun:
+
+| Without the lock | What happened |
+|---|---|
+| 5 cards answered at the same moment | **No daily bonus at all**: each transaction counted fewer than 5 answers, because the others hadn't committed yet |
+| Same answer double-tapped | **One request got a 500**: both passed the "seen this key?" check, then one hit the unique constraint |
+
+Both tests failed every time; with the lock restored, all 59 pass (three runs in a row).
+*Lesson: database constraints stopped double payment, but only a lock gives correct behaviour; test
+races by actually racing requests (`Promise.all`).*
+
+**6. Dates from Postgres could shift by a day.**
+Not a bug yet, but a known trap: the `pg` driver turns `DATE` columns into JS `Date` objects at midnight
+in the **server's** timezone. On a server in UTC, IST dates would be compared wrongly. Fixed up front by
+registering a type parser that returns `'YYYY-MM-DD'` strings (`lib/db-utils.ts`).
+
+### How it was verified
+
+| Check | Result |
+|---|---|
+| `npm test` | **59 passed** (3 runs in a row): 18 pure rules, 23 API, 11 database rules, 7 datasets |
+| Remove the per-user lock, run concurrency tests | Both fail (no bonus; 500 on double tap); restored → pass |
+| `curl` without a session | `401 not_signed_in` |
+| `curl` session → today | Cookie is HttpOnly; 5 cards; response contains no answers or explanations |
+| Answer a full day (1 wrong) | 4 × 10 + 5 bonus = **45 points**, streak 1, First Step badge, 5 ledger rows |
+| Retry the last answer (same key) | `replayed: true`, no rewards, total still 45 |
+| Answer a card twice | `409 already_answered` |
+| `GET /api/leaderboard` | Week starts Monday 12 Oct; rank 1 with 45 points; fallback name "Player 0014" |
+| `npm run lint` / `typecheck` / `format:check` / `build` | All pass; web bundle 75.9 KB gzipped (API client now validates every response) |
+
+### What's next
+
+Step 4, `feature/challenge-generator`: the Yahoo Finance provider, rule-based chart cards, the
+`/internal/jobs/generate-challenges` endpoint and the GitHub Actions schedule.
 
 ---
 
