@@ -25,6 +25,7 @@ Each entry follows the same template (see the end of this file).
 - [Step 5: Docker, CI/CD and deployment](#step-5-docker-cicd-and-deployment)
 - [Step 6: Chart cards](#step-6-chart-cards)
 - [Step 7: The explainer](#step-7-the-explainer)
+- [Step 8: Email login (save your progress)](#step-8-email-login-save-your-progress)
 
 ---
 
@@ -1167,7 +1168,7 @@ stayed a market word). From now on every deploy and every evening at 18:30 IST k
 
 ## Step 7: The explainer
 
-**Date:** 2026-10-14 · **Branch:** `docs/explainer`
+**Date:** 2026-10-14 · **Branch:** `docs/explainer` · **PR:** [#9](https://github.com/ash-1202/daily-loop/pull/9)
 
 ### Goal
 
@@ -1209,6 +1210,99 @@ README.md               # "Start here" link to the explainer at the top
 ### What's next
 
 Clean the test data from production before sharing the link, then email OTP login if time allows.
+
+---
+
+## Step 8: Email login (save your progress)
+
+**Date:** 2026-10-14 · **Branch:** `feature/email-otp`
+
+### Goal
+
+Let a guest keep their points and streak, and get them back on another phone, with a 6-digit code sent
+by email: no passwords, no friction before the first card, and safe against guessing, spamming and
+"who has an account?" probing.
+
+### What was built
+
+```
+db/migrations/0005_otp_rate_limits.sql    # otp_codes.requested_ip + index (per-IP rate limit)
+apps/api/src/email/sender.ts              # EmailSender: Console (dev), Memory (tests), Resend (production)
+apps/api/src/services/email-login.ts      # requestCode, verifyCode: HMAC codes, limits, linking
+apps/api/src/routes/auth.ts               # POST /api/auth/otp/request, /otp/verify, /logout
+apps/api/src/config.ts                    # EMAIL_PROVIDER, RESEND_API_KEY, EMAIL_FROM, OTP_SECRET
+apps/api/src/services/sessions.ts         # createSession / revokeSession helpers
+packages/shared/src/api.ts                # otp schemas; user.email; me.features.emailLogin
+apps/web/src/components/SaveProgress.tsx  # email → code → saved / log out
+apps/web/src/screens/*                    # Me: Save your progress; Done: "Save your streak" nudge
+apps/api/test/email-login.test.ts         # 15 tests
+deploy/docker-compose.prod.yml            # app gets env_file: .env (for the email settings)
+```
+
+### Key files explained
+
+**Two transactions in `verifyCode`, on purpose.** A wrong guess must increase `attempts`, but the request
+must still fail. If the check threw inside the transaction, the rollback would undo the increment and
+make guessing free. So the check runs in its own transaction and *returns* the outcome; the error is
+thrown after it commits.
+
+**HMAC, not a hash.** There are only 1,000,000 six-digit codes; a plain SHA-256 of one can be reversed by
+trying them all in well under a second. `hashCode` is an HMAC keyed with `OTP_SECRET`, which lives in the
+server's `.env`, not in the database. Comparison uses `timingSafeEqual`.
+
+**Rate limits in the database.** One query counts recent codes for the email (≤ 3 per 15 min) and the IP
+(≤ 10 per hour), using the `requested_ip` column added by migration 0005. No in-memory limiter to lose on
+restart.
+
+**Linking rules.** New email → linked to this guest. Email already on another account → this device's
+identities move to that account, the guest's sessions end, and a new cookie is issued (`switchedAccount`).
+Points are not merged. Log out revokes the session, and the app deletes its device token so it really is a
+new guest.
+
+**Off unless configured.** `EMAIL_PROVIDER` defaults to `console` locally and `none` in production. With
+`none`, `/api/me` reports `features.emailLogin: false` and the UI hides the feature. `resend` without an API
+key, or production email without `OTP_SECRET`, stops the server at startup instead of half-working.
+
+### Concepts to learn from this step
+
+| Concept | In one line |
+|---|---|
+| OTP (one-time password) | A short code proving you control an inbox; short-lived, single-use, attempt-limited |
+| HMAC | A keyed hash: useless to an attacker who has the database but not the key |
+| Constant-time comparison | Comparing secrets without leaking how many characters matched |
+| Account enumeration | Don't let an endpoint reveal whether an email has an account |
+| Counting failures correctly | Commit the failure counter even though the request fails |
+| Feature flags from config | Ship the code switched off; turn it on with configuration, not a redeploy |
+| Fail fast on misconfiguration | Refuse to start rather than run half-configured |
+
+### Problems hit and how they were fixed
+
+**1. An older code was accepted.** The first version checked "the newest unused code" by `created_at`. In a
+test, two codes were created at the same (fake) instant, and the older one was accepted. Now issuing a code
+retires all earlier unused codes for that address, so exactly one code is valid at any time. *Lesson: don't
+rely on timestamps to order things that can happen at the same moment.*
+
+**2. Production settings wouldn't have reached the app.** The production compose file passed only named
+variables to the app container, so `EMAIL_PROVIDER` and friends in `.env` would have been ignored. The app
+service now has `env_file: .env`. Caught while planning the rollout, not in production.
+
+**3. A screenshot looked like a bug.** After "Send code" the screen still showed the email step; a second
+look a moment later showed the code step. The request (202) had simply not returned yet when the first
+screenshot was taken.
+
+### How it was verified
+
+| Check | Result |
+|---|---|
+| `npm test` | **96 passed** (+15): code email, HMAC storage, no account discovery, per-email and per-IP limits, save progress, single use, expiry, 5-try lock, newest code only, new-phone switch, logout, feature off, Resend request/failure |
+| Remove the 5-try lock on purpose | The lock test fails; restored → passes |
+| Browser, phone size | Done-screen nudge → Me → email → code (from the dev log) → "Progress saved"; log out → new guest ⭐ 0; same email again → "Welcome back!" → ⭐ 45, 🔥 1 restored |
+| Built server, `NODE_ENV=production` | No email config → "email login: none"; `resend` without key / without `OTP_SECRET` → refuses to start |
+
+### What's next
+
+Merge, copy the updated compose file to the server, then (owner) set up Resend and the DNS records for
+`mail.tradertrix.com` and add the key, following `deploy/README.md` → "Turning on email login".
 
 ---
 

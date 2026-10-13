@@ -19,7 +19,7 @@ beforeAll(() => {
   writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Market Daily 5</title>');
   writeFileSync(join(dir, 'assets', 'index-abc123.js'), 'console.log(1)');
   writeFileSync(join(dir, 'manifest.webmanifest'), '{}');
-  app = buildApp({ pool, clock: () => new Date(), staticDir: dir });
+  app = buildApp({ pool, clock: () => new Date(), staticDir: dir, email: null });
 });
 
 afterAll(async () => {
@@ -73,7 +73,7 @@ describe('serving the web app', () => {
 
   it('refuses to start without an index.html', () => {
     expect(() =>
-      buildApp({ pool, clock: () => new Date(), staticDir: tmpdir() + '/missing' }),
+      buildApp({ pool, clock: () => new Date(), staticDir: tmpdir() + '/missing', email: null }),
     ).toThrow(/no index.html/);
   });
 });

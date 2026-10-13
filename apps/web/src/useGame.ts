@@ -10,7 +10,7 @@ import {
   type TodayResponse,
 } from '@daily-loop/shared';
 import { api } from './api';
-import { getDeviceToken, randomId } from './device';
+import { getDeviceToken, randomId, resetDeviceToken } from './device';
 
 export type LoadState =
   { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; offline: boolean };
@@ -33,7 +33,7 @@ const isOffline = (err: unknown) => !(err instanceof ApiError) || err.status >= 
 
 /**
  * All game state and actions for the web app. Screens stay simple: they read state and call
- * `answer`, `retry`, `reload` or `setDisplayName`.
+ * `answer`, `retry`, `reload`, `setDisplayName`, or the email login actions.
  */
 export function useGame() {
   const [state, setState] = useState<GameState>({
@@ -155,5 +155,35 @@ export function useGame() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [reload]);
 
-  return { state, answer, retry, reload, setDisplayName };
+  /** Email login, step 1: send a code. Errors (e.g. too many requests) are thrown for the screen. */
+  const requestCode = useCallback(async (email: string) => {
+    await api.requestOtp({ email });
+  }, []);
+
+  /**
+   * Email login, step 2: check the code. If the email belonged to another account, this device is
+   * now signed in to it, so everything is reloaded. Returns whether that happened.
+   */
+  const verifyCode = useCallback(
+    async (email: string, code: string): Promise<boolean> => {
+      const res = await api.verifyOtp({ email, code });
+      if (res.switchedAccount) {
+        await reload();
+      } else {
+        const me = await api.me();
+        setState((s) => ({ ...s, me }));
+      }
+      return res.switchedAccount;
+    },
+    [reload],
+  );
+
+  /** Ends the session and forgets the device, then starts again as a new guest. */
+  const logout = useCallback(async () => {
+    await api.logout().catch(() => {});
+    resetDeviceToken();
+    window.location.reload();
+  }, []);
+
+  return { state, answer, retry, reload, setDisplayName, requestCode, verifyCode, logout };
 }

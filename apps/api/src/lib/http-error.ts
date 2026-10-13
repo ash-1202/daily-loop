@@ -6,8 +6,9 @@ export class HttpError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    options?: { cause?: unknown },
   ) {
-    super(message);
+    super(message, options);
     this.name = 'HttpError';
   }
 }

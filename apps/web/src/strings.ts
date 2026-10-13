@@ -75,4 +75,24 @@ export const strings = {
   freezeHelp: 'Miss one day a week and your streak is safe. 🧊',
   badgesTitle: 'Badges',
   locked: 'Locked',
+
+  // Save progress (email login)
+  saveTitle: '🔒 Save your progress',
+  saveHelp: 'Add your email to keep your points and streak, even on a new phone.',
+  emailLabel: 'Your email',
+  emailPlaceholder: 'name@example.com',
+  sendCode: 'Send code',
+  codeSentTo: (email: string) => `We sent a 6-digit code to ${email}.`,
+  codeLabel: 'Code from the email',
+  verify: 'Verify',
+  newCode: 'Send a new code',
+  otherEmail: 'Use a different email',
+  savedAs: (email: string) => `✅ Progress saved to ${email}`,
+  welcomeBack: 'Welcome back! You are signed in to your saved account.',
+  neverShare: 'We will never ask you for this code. Do not share it.',
+  logout: 'Log out',
+  logoutHelp:
+    'On this phone you will start again as a new guest. Sign in with your email any time.',
+  saveNudge: 'Save your streak: add your email in Me.',
+  saveNudgeButton: 'Save progress',
 } as const;

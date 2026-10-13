@@ -7,7 +7,7 @@ A lightweight, mobile-first web app built around a short daily task with streaks
 > **Start here: [EXPLAINER.md](EXPLAINER.md)**: what I built, the choices I made, what I left out, and how AI was used.
 >
 > **Status:** playable end to end: guest start, 5 daily cards (including real chart cards), points,
-> streaks, badges and a weekly leaderboard. Email login is designed but not built yet.
+> streaks, badges, a weekly leaderboard, and saving progress with an email code.
 >
 > - **Why** things are built this way: [docs/brainstorm.md](docs/brainstorm.md) (decisions and reasoning)
 > - **How** the code was built, step by step: [docs/BUILD_LOG.md](docs/BUILD_LOG.md) (learning journal)
@@ -69,7 +69,7 @@ Built for patchy mobile data:
 - If an answer fails to send, the app says so and offers **Try again**. The retry reuses the same
   idempotency key, so it can never be counted twice.
 - Opening the app on a new IST day loads the new challenge automatically.
-- The whole app is about **80 KB of JavaScript + 2 KB of CSS** (gzipped), with no UI libraries.
+- The whole app is about **83 KB of JavaScript + 2 KB of CSS** (gzipped), with no UI libraries.
 
 ---
 
@@ -127,18 +127,26 @@ holds only screens. A future `apps/mobile` (React Native) only needs its own scr
 ## Login: guest first, email OTP to save progress
 
 ```
-Open app → play as guest → "Save your streak 🔥" → enter email → 6-digit OTP → same account, now verified
+Open app → play as guest → Done screen: "Save your streak" → Me → email → 6-digit code → saved
+New phone → play as guest → Me → same email → code → "Welcome back!" → saved account restored
 ```
 
 - **Play first, log in later.** Anyone opening the link is answering the first card within seconds.
-  A verified email is required **before points can be claimed or redeemed**, and keeps progress safe across phone changes.
-- **Email OTP, no passwords.** It is effectively free and every Android user has a Gmail account.
-  Phone OTP in India needs DLT registration for SMS (or WhatsApp Business approval), so it comes later.
-- **Ready for phone login.** A person (`users`) is separate from how they log in (`identities`: device, email, phone).
-  OTPs are sent through one `OtpSender` interface: email now, SMS or WhatsApp later, with no schema change.
-- **OTP safety:** 6 digits, 10-minute expiry, single use, max 5 attempts, stored only as a hash,
-  rate-limited per email and IP; session in an httpOnly cookie. In local development the OTP is printed
-  to the console, so setup needs no email account.
+  Saving progress keeps points and streak across phones; before points could ever be redeemed, a
+  verified account would be required.
+- **Email codes, no passwords.** Phone OTP in India needs DLT registration (SMS) or WhatsApp Business
+  approval, so it comes later. A person (`users`) is separate from how they log in (`identities`:
+  device, email, phone), so adding phone login needs no schema change.
+- **Email that already has an account?** This device signs in to that account. Guest progress is not
+  merged into it (merging points between accounts would be easy to abuse).
+- **Log out** ends the session and forgets the device, so the phone starts again as a new guest.
+- **Code safety:** 6 digits, 10 minutes, single use, only the newest code valid, 5 wrong tries then
+  locked; stored only as an **HMAC** keyed with a server secret (a plain hash of 1 million possible codes
+  could be reversed instantly); max 3 codes per email per 15 minutes and 10 per IP per hour; the request
+  endpoint answers the same for every email (no account discovery); the email warns "we will never ask
+  you for this code".
+- **Email delivery** sits behind an `EmailSender` interface: printed to the console locally, Resend in
+  production. With no provider configured the feature is simply hidden (`/api/me` → `features.emailLogin`).
 
 ---
 
@@ -272,17 +280,21 @@ and used by both the API (to validate requests) and the typed client (to validat
 | `GET /api/me` | ✅ | Points, streak, all badges (earned or not) |
 | `PATCH /api/me` | ✅ | `{ displayName }` for the leaderboard (2–20 letters, digits, spaces) |
 | `GET /api/leaderboard` | ✅ | This week's top 10 (Monday to Sunday, IST) + your rank |
-| `POST /api/auth/otp/request`, `/verify`, `/logout` | ⏳ | Email OTP login (next step) |
+| `POST /api/auth/otp/request` | ✅ | `{ email }` → emails a 6-digit code (202; same answer for every email) |
+| `POST /api/auth/otp/verify` | ✅ | `{ email, code }` → saves progress to the email, or signs in to its account (`switchedAccount`) |
+| `POST /api/auth/logout` | ✅ | Ends the session (204); the app then forgets its device token |
 | `
 
 Errors always look like `{ "error": { "code": "already_answered", "message": "…" } }`:
 
 | Status | Codes |
 |---|---|
-| 400 | `invalid_request`, `invalid_answer`, `challenge_closed` |
+| 400 | `invalid_request`, `invalid_answer`, `challenge_closed`, `wrong_code`, `code_expired` |
 | 401 | `not_signed_in` |
 | 404 | `card_not_found` |
 | 409 | `already_answered`, `idempotency_key_reused` |
+| 429 | `too_many_requests`, `too_many_attempts` |
+| 502 / 503 | `email_failed` / `email_unavailable` |
 
 **How a submission is scored** (all in one database transaction, see
 [`services/submissions.ts`](apps/api/src/services/submissions.ts)):
@@ -391,7 +403,7 @@ the API is running but cannot reach the database.
 
 ```
 merge to main ─► GitHub Actions
-                   1. checks: format, lint, typecheck, datasets, 66 tests (real Postgres), build
+                   1. checks: format, lint, typecheck, datasets, 96 tests (real Postgres), build
                    2. docker build ─► ghcr.io/ash-1202/daily-loop:<commit sha>
                    3. ssh deploy@droplet "deploy <sha>"  ── forced command, can run nothing else
                         └─ pull → migrate → seed → restart app → wait healthy → check version

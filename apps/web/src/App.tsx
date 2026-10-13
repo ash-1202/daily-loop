@@ -8,7 +8,8 @@ import { strings } from './strings';
 import { useGame } from './useGame';
 
 export function App() {
-  const { state, answer, retry, reload, setDisplayName } = useGame();
+  const { state, answer, retry, reload, setDisplayName, requestCode, verifyCode, logout } =
+    useGame();
   const [tab, setTab] = useState<Tab>('today');
   const { load, today, me } = state;
 
@@ -27,7 +28,15 @@ export function App() {
   } else if (tab === 'leaders') {
     body = <LeadersScreen />;
   } else if (tab === 'me') {
-    body = <MeScreen me={me} onSaveName={setDisplayName} />;
+    body = (
+      <MeScreen
+        me={me}
+        onSaveName={setDisplayName}
+        onRequestCode={requestCode}
+        onVerifyCode={verifyCode}
+        onLogout={logout}
+      />
+    );
   } else {
     body = (
       <TodayScreen
@@ -43,6 +52,7 @@ export function App() {
         }}
         onRetry={retry}
         onShowLeaders={() => setTab('leaders')}
+        onShowMe={() => setTab('me')}
       />
     );
   }

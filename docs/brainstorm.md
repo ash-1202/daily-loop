@@ -463,6 +463,14 @@ POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates 
 | 2026-10-14 | Daily job via server cron + on deploy, not GitHub Actions | Always-on server; no public job endpoint or secret |
 | 2026-10-14 | Direct Yahoo chart endpoint behind `MarketDataProvider`; synthetic test fixtures | No extra dependency; no third-party market data committed to a public repo |
 | 2026-10-14 | Market-data failure never blocks a deploy or a day | Learning content must always be available; charts are a bonus slot |
+| 2026-10-14 | Email login built: guest first, "Save your progress" with a 6-digit email code | Keeps zero-friction start; lets progress survive a new phone |
+| 2026-10-14 | Codes stored as HMAC (server secret), not a plain hash | 1 million possible codes: a plain hash is reversible instantly if the database leaks |
+| 2026-10-14 | Only the newest code is valid; older unused ones are retired when a new one is sent | "Latest by timestamp" failed in a test when two codes shared a timestamp |
+| 2026-10-14 | Rate limits in Postgres (3/email/15 min, 10/IP/hour), not an in-memory plugin | Survive restarts and work across instances; no extra dependency |
+| 2026-10-14 | Same response for every email on request | Prevents using the endpoint to find out who has an account |
+| 2026-10-14 | Verifying an email that has an account signs this device in to it; no merging | Merging points between accounts would be easy to abuse |
+| 2026-10-14 | Email via an `EmailSender` interface: console locally, Resend in production, off if not configured | No account needed to develop; production can't half-work: misconfiguration stops startup |
+| 2026-10-14 | Send from the subdomain `mail.tradertrix.com` | Keeps this app's email reputation separate from the main domain |
 
 ---
 
@@ -490,3 +498,5 @@ Keep this updated for the explainer.
   (synthetic data), and the cron/deploy integration.
 - 2026-10-14: Claude drafted EXPLAINER.md (in the user's voice, for the user to review) and captured
   the screenshots from the running app.
+- 2026-10-14: Claude built email login (OTP service, routes, rate limits, email sender, "Save your
+  progress" UI, logout) and its 15 tests, and tested the full flow in the browser.

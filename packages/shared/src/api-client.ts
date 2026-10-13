@@ -2,11 +2,15 @@ import {
   apiErrorSchema,
   leaderboardResponseSchema,
   meResponseSchema,
+  otpVerifyResponseSchema,
   sessionResponseSchema,
   submitResponseSchema,
   todayResponseSchema,
   type LeaderboardResponse,
   type MeResponse,
+  type OtpRequest,
+  type OtpVerify,
+  type OtpVerifyResponse,
   type SessionRequest,
   type SessionResponse,
   type SubmitRequest,
@@ -80,6 +84,14 @@ export function createApiClient(baseUrl = '') {
 
     leaderboard: (): Promise<LeaderboardResponse> =>
       request('GET', '/api/leaderboard', (d) => leaderboardResponseSchema.parse(d)),
+
+    requestOtp: (body: OtpRequest): Promise<void> =>
+      request('POST', '/api/auth/otp/request', () => undefined, body),
+
+    verifyOtp: (body: OtpVerify): Promise<OtpVerifyResponse> =>
+      request('POST', '/api/auth/otp/verify', (d) => otpVerifyResponseSchema.parse(d), body),
+
+    logout: (): Promise<void> => request('POST', '/api/auth/logout', () => undefined, {}),
   };
 }
 

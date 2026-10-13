@@ -15,7 +15,7 @@ export async function meRoutes(app: FastifyInstance) {
       getStreakView(pool, userId, today),
       listBadges(pool, userId),
     ]);
-    return { user, points, streak, badges };
+    return { user, points, streak, badges, features: { emailLogin: app.deps.email !== null } };
   };
 
   /** Points balance, streak and badges. */
