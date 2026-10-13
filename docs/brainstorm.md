@@ -383,6 +383,16 @@ POST /internal/jobs/generate-challenges  -> (X-Job-Secret header) pre-generates 
 | 2026-10-13 | Join table `daily_challenge_tasks` instead of a `task_ids[]` array | Arrays cannot have foreign keys |
 | 2026-10-13 | Tests run against a separate `daily_loop_test` database; each test rolls back | Dev data is never touched; tests stay independent |
 | 2026-10-13 | Badge "First Step" added (4 badges instead of 3) | A reward on day one makes the first session feel complete |
+| 2026-10-13 | A streak day = all 5 cards answered (right or wrong) | Rewards showing up, not only being right; wrong answers still teach via "Why?" |
+| 2026-10-13 | Cards picked least-recently-used first, ties random; chart slot falls back to a term until chart cards exist | Even rotation, no repeats while the pool lasts; the app works before the chart generator |
+| 2026-10-13 | Answer options shuffled with a seed of (date, card id) | Same order for everyone and on reload, but the right answer isn't always in the same place |
+| 2026-10-13 | Yesterday's challenge accepts answers for 15 minutes after midnight IST | An answer sent at 23:59:59 on a slow network isn't rejected |
+| 2026-10-13 | Per-user advisory lock around each submission | Without it, simultaneous answers skipped the daily bonus and a double tap caused a 500 (proven by removing the lock in a test) |
+| 2026-10-13 | Idempotent replay returns current state with no rewards (`replayed: true`) rather than re-sending the original rewards | Simpler, and the client already showed the rewards from the first response |
+| 2026-10-13 | `buildApp({ pool, clock })`: the database and the current time are injected | Tests use a test database and move a fake clock across days, weeks and midnight |
+| 2026-10-13 | All timestamps written by the app (ledger, submissions) come from the injected clock, not `now()` in SQL | One source of time, so "this week's points" and streaks agree in tests and in production |
+| 2026-10-13 | `pg` returns DATE columns as 'YYYY-MM-DD' strings | A JS Date is midnight in the server's timezone and can shift the day |
+| 2026-10-13 | Session cookie: random 256-bit token, only its SHA-256 stored, httpOnly + SameSite=Lax (+ Secure in production), 180 days | A database leak doesn't leak working sessions; JavaScript can't read the cookie |
 
 ---
 
@@ -399,3 +409,5 @@ Keep this updated for the explainer.
   Fastify health endpoint, React page) and tested it, including a database restart.
 - 2026-10-13: Claude wrote the SQL migrations, migration runner, seed script and tests, and drafted
   the first 30 market-word and 30 scam-or-safe cards (content to be reviewed by a human for accuracy and tone).
+- 2026-10-13: Claude wrote the challenge API (sessions, challenge builder, scoring, streaks, badges,
+  leaderboard) and its 59 tests, including concurrency tests verified by removing the lock they protect.

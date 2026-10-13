@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { config } from './config';
+import './lib/db-utils'; // registers the DATE type parser
 
 export const pool = new pg.Pool({
   connectionString: config.DATABASE_URL,
@@ -13,13 +14,3 @@ export const pool = new pg.Pool({
 pool.on('error', (err) => {
   console.warn(`Postgres idle client error (client discarded): ${err.message}`);
 });
-
-/** Returns true if the database answers a trivial query. */
-export async function isDbUp(): Promise<boolean> {
-  try {
-    await pool.query('SELECT 1');
-    return true;
-  } catch {
-    return false;
-  }
-}

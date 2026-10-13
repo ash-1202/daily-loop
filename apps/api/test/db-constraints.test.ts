@@ -2,6 +2,7 @@ import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrate } from '../src/migrate';
 import { seed } from '../src/seed/seed';
+import { resetGameData } from './api-helpers';
 import { createTestPool, expectPgError, withRollback } from './test-db';
 
 // Postgres error codes used below.
@@ -11,8 +12,9 @@ const CHECK_VIOLATION = '23514';
 const RAISE_EXCEPTION = 'P0001';
 
 let pool: pg.Pool;
-beforeAll(() => {
+beforeAll(async () => {
   pool = createTestPool();
+  await resetGameData(pool); // start from no users or challenges, whatever ran before
 });
 afterAll(async () => {
   await pool.end();

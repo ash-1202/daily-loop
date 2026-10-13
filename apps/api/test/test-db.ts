@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { expect } from 'vitest';
 import { config } from '../src/config';
+import '../src/lib/db-utils'; // DATE columns as 'YYYY-MM-DD' strings, as in the app
 
 /** The test database lives next to the dev database, with a `_test` suffix. Dev data is never touched. */
 export function testDatabaseUrl(): string {
@@ -10,7 +11,7 @@ export function testDatabaseUrl(): string {
 }
 
 export function createTestPool(): pg.Pool {
-  const pool = new pg.Pool({ connectionString: testDatabaseUrl(), max: 4 });
+  const pool = new pg.Pool({ connectionString: testDatabaseUrl(), max: 10 });
   pool.on('error', () => {});
   return pool;
 }
