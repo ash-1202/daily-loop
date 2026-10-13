@@ -71,6 +71,16 @@ export const badgesFileSchema = z.object({
   items: z.array(badgeItemSchema).check(z.minLength(1)),
 });
 
+/** Stocks the chart generator may use (Yahoo Finance symbols, e.g. RELIANCE.NS). Not seeded. */
+export const chartUniverseFileSchema = z.object({
+  dataset: z.literal('chart_universe'),
+  ...fileHeader,
+  items: z
+    .array(z.object({ symbol: z.string().check(z.regex(/^[A-Z0-9&-]+\.NS$/)) }))
+    .check(z.minLength(5)),
+});
+export type ChartUniverseFile = z.infer<typeof chartUniverseFileSchema>;
+
 export type TermItem = z.infer<typeof termItemSchema>;
 export type ScamItem = z.infer<typeof scamItemSchema>;
 export type BadgeItem = z.infer<typeof badgeItemSchema>;

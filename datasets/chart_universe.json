@@ -1,0 +1,31 @@
+{
+  "dataset": "chart_universe",
+  "name": "Chart card stocks (NSE large caps; names never shown)",
+  "version": 1,
+  "items": [
+    { "symbol": "RELIANCE.NS" },
+    { "symbol": "TCS.NS" },
+    { "symbol": "HDFCBANK.NS" },
+    { "symbol": "INFY.NS" },
+    { "symbol": "ICICIBANK.NS" },
+    { "symbol": "HINDUNILVR.NS" },
+    { "symbol": "ITC.NS" },
+    { "symbol": "SBIN.NS" },
+    { "symbol": "BHARTIARTL.NS" },
+    { "symbol": "KOTAKBANK.NS" },
+    { "symbol": "LT.NS" },
+    { "symbol": "AXISBANK.NS" },
+    { "symbol": "ASIANPAINT.NS" },
+    { "symbol": "MARUTI.NS" },
+    { "symbol": "SUNPHARMA.NS" },
+    { "symbol": "TITAN.NS" },
+    { "symbol": "ULTRACEMCO.NS" },
+    { "symbol": "WIPRO.NS" },
+    { "symbol": "NESTLEIND.NS" },
+    { "symbol": "POWERGRID.NS" },
+    { "symbol": "NTPC.NS" },
+    { "symbol": "TATASTEEL.NS" },
+    { "symbol": "M&M.NS" },
+    { "symbol": "BAJFINANCE.NS" }
+  ]
+}

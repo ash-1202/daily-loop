@@ -11,3 +11,6 @@ export const POINTS = {
 } as const;
 
 export const STREAK_FREEZES_PER_WEEK = 1;
+
+/** How many days ahead the daily job builds challenges (and chart cards). */
+export const DAYS_AHEAD = 7;

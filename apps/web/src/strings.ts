@@ -25,6 +25,9 @@ export const strings = {
   scamIntro: 'You got this message:',
   scamQuestion: 'Is it a scam or safe?',
   scamOption: { scam: '🚩 Scam', safe: '✅ Safe' } as Record<string, string>,
+  chartAria: (days: number) => `Candlestick chart of a stock's price over ${days} days`,
+  chartDay: (n: number) => `Day ${n}`,
+  chartCaption: 'Hollow candle = closed higher. Filled = closed lower. Prices start at 100.',
 
   // Result
   correct: 'Correct!',
