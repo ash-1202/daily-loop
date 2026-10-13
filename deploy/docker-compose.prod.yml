@@ -6,8 +6,11 @@
 # - Memory caps, and oom_score_adj 800 (> ChaiHouse's 500): under memory pressure the kernel
 #   stops daily-loop before ChaiHouse.
 # - Nothing listens on a public port. ChaiHouse's Caddy (ports 80/443) reaches the app over the
-#   "edge" network, using the unique name "daily-loop-app". A service called "app" here would
-#   collide with ChaiHouse's "app" alias on that network and split its traffic.
+#   "edge" network (ChaiHouse's network), using the unique name "daily-loop-app".
+# - EVERY service name here must be unique across both projects. The app is on two networks, and
+#   Docker's DNS answers a name from any of them: a service called "db" here resolved to
+#   ChaiHouse's "db" (its Postgres) on the first deploy. Likewise "app" would split ChaiHouse's
+#   traffic. Hence "daily-loop-app" and "daily-loop-db".
 
 name: daily-loop
 
@@ -16,11 +19,11 @@ services:
     image: ghcr.io/ash-1202/daily-loop:${IMAGE_TAG:?set IMAGE_TAG to a commit sha}
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://daily_loop:${POSTGRES_PASSWORD:?missing in .env}@db:5432/daily_loop
+      DATABASE_URL: postgres://daily_loop:${POSTGRES_PASSWORD:?missing in .env}@daily-loop-db:5432/daily_loop
       NODE_ENV: production
       TRUST_PROXY: 'true'
     depends_on:
-      db:
+      daily-loop-db:
         condition: service_healthy
     networks:
       - default
@@ -36,7 +39,7 @@ services:
         max-size: '10m'
         max-file: '3'
 
-  db:
+  daily-loop-db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:

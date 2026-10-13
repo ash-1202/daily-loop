@@ -38,7 +38,9 @@ log "deploying $TAG (previous: ${PREVIOUS:-none})"
 
 # 2. Database up (no-op if already running), then migrations and seed with the NEW code.
 #    Migrations are additive only, so the old app keeps working if we roll back below.
-compose "$TAG" up -d --wait db
+# --remove-orphans: removes containers of services no longer in the compose file (e.g. renamed),
+#   so two Postgres containers can never run on the same data volume. Only this project is affected.
+compose "$TAG" up -d --wait --remove-orphans daily-loop-db
 compose "$TAG" run --rm --no-deps daily-loop-app node apps/api/dist/migrate.js
 compose "$TAG" run --rm --no-deps daily-loop-app node apps/api/dist/seed.js
 

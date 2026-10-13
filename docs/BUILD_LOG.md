@@ -22,6 +22,7 @@ Each entry follows the same template (see the end of this file).
 - [Step 2: Database schema and datasets](#step-2-database-schema-and-datasets)
 - [Step 3: Challenge API](#step-3-challenge-api)
 - [Step 4: Game screens (web UI)](#step-4-game-screens-web-ui)
+- [Step 5: Docker, CI/CD and deployment](#step-5-docker-cicd-and-deployment)
 
 ---
 
@@ -703,7 +704,7 @@ The chart generator moves to step 5.)*
 
 ## Step 4: Game screens (web UI)
 
-**Date:** 2026-10-13 · **Branch:** `feature/web-ui`
+**Date:** 2026-10-13 · **Branch:** `feature/web-ui` · **PR:** [#5](https://github.com/ash-1202/daily-loop/pull/5)
 
 ### Goal
 
@@ -846,6 +847,182 @@ day boundary itself is covered by the API tests.
 ### What's next
 
 Step 5, `feature/challenge-generator`: Yahoo Finance chart cards, the pre-generation job and its schedule.
+
+*(Changed: deployment came next instead, so a live link existed early and hosting problems surfaced
+while there was time to fix them.)*
+
+---
+
+## Step 5: Docker, CI/CD and deployment
+
+**Date:** 2026-10-13 / 14 · **Branches:** `feature/deploy` ([PR #6](https://github.com/ash-1202/daily-loop/pull/6)), `fix/deploy-db-name`
+· **Live:** https://daily5.tradertrix.com
+
+### Goal
+
+Put the app on a real URL that a reviewer can open on a phone, and make shipping automatic: every merge to
+`main` is tested, packaged as a Docker image and deployed, with an automatic rollback if the new version
+is unhealthy. The server is shared with another product (ChaiHouse), which must never be affected.
+
+### Choosing where to host
+
+| Option | Finding | Verdict |
+|---|---|---|
+| Render free | Sleeps after 15 min idle; **30–60 s** to wake | ❌ a reviewer would wait on a blank screen |
+| Vercel + Neon | Fast, free, one domain | ✅ viable fallback |
+| Another existing droplet | 1 GB RAM, no Docker, sensitive workload | ❌ keep it isolated |
+| **ChaiHouse droplet** | Bangalore, 2 GB RAM (1.3 GB free), Docker + Caddy + GHCR already, nightly backups | ✅ chosen |
+
+The server was inspected **read-only first** (memory, disk, containers, ports, firewall, Caddy config,
+how ChaiHouse deploys) before proposing anything. That inspection is what revealed the name-collision
+risk on ChaiHouse's network.
+
+### What was built
+
+```
+Dockerfile                    # 4 stages: deps → build → production deps → runtime (node:22-alpine, non-root)
+.dockerignore                 # no node_modules, .git, .env, docs in the build context
+apps/api/src/routes/web.ts    # API serves the built web app (one domain) + JSON 404s
+apps/api/src/config.ts        # + STATIC_DIR, TRUST_PROXY, APP_VERSION
+apps/api/test/web.test.ts     # caching headers, SPA fallback, 404s, version
+.github/workflows/ci.yml      # PRs: format, lint, typecheck, datasets, tests (Postgres service), build, docker build
+.github/workflows/deploy.yml  # main: checks → image to GHCR → SSH deploy (retries) → verify public URL
+deploy/
+├── docker-compose.prod.yml   # app + db, memory caps, oom priority, loopback port, shared "edge" network
+├── deploy-daily-loop.sh      # pull → migrate → seed → restart → health → record tag; rollback on failure
+├── daily-loop-ssh-gate.sh    # forced command: only "deploy <40-hex sha>"
+├── backup-daily-loop.sh      # nightly pg_dump, 14 days
+├── Caddyfile.daily5          # HTTPS site block (security headers, compression)
+└── README.md                 # runbook: one-time setup, operations, rollback, restore
+docker-compose.yml            # dev stack renamed to project "daily-loop-dev"
+```
+
+### Key files explained
+
+**One image, one domain.** In production the API also serves `apps/web/dist`. Files in `/assets/` have a
+content hash in their name, so they're cached for a year (`immutable`); `index.html` is `no-cache`, so
+phones always pick up a new release. Unknown GET paths return `index.html` (single-page app); unknown
+`/api/*` paths stay JSON 404s. The session lookup now runs only for `/api/*`, so static files never cost
+a database query.
+
+**The Dockerfile's four stages.** Dependencies are installed in a layer that only changes when a
+`package.json` or the lockfile changes (fast rebuilds). The final stage copies only the API bundle, the
+web build, migrations, datasets and **production** dependencies (32.8 MB), and runs as the unprivileged
+`node` user with a `HEALTHCHECK`. `APP_VERSION` (the commit sha) is set last, so a new commit doesn't
+invalidate earlier layers; `/api/health` reports it.
+
+**The deploy script** (`deploy-daily-loop <sha>`), run on the server:
+
+```
+validate sha → lock (one deploy at a time) → pull image → db up → migrate → seed
+→ replace app container → wait for Docker health → check /api/health shows <sha> and db up
+→ record current_tag / previous_tag → keep the 3 newest images
+any failure after the app was replaced → start previous_tag again → exit 1 (the workflow fails)
+```
+
+Migrations run *before* the app is replaced and are additive only, so the old version keeps working
+during the deploy and after a rollback.
+
+**Least privilege for CI.** GitHub holds an SSH key for user `deploy`. On the server:
+
+```
+restrict,command="/usr/local/bin/daily-loop-ssh-gate" ssh-ed25519 AAAA… github-actions-daily-loop
+```
+
+`restrict` disables port forwarding, agent forwarding and terminals; `command=` replaces whatever the
+client asks to run with the gate. The gate accepts only `deploy <exactly 40 chars of 0-9a-f>` and runs the
+root-owned deploy script through one sudo rule. `deploy` has a locked password and isn't in the
+`docker` group (which would be root-equivalent).
+
+**Sharing a server.** Memory caps (app 256 MB, db 200 MB), `oom_score_adj: 800` (ChaiHouse 500), log
+rotation, no public ports, and a separate compose project. Caddy (ChaiHouse's) reaches the app over
+ChaiHouse's Docker network.
+
+### Concepts to learn from this step
+
+| Concept | In one line |
+|---|---|
+| Multi-stage Docker build | Build with all the tools, ship only what runs |
+| Layer caching | Copy dependency manifests before source, so code changes don't reinstall packages |
+| Immutable tags | Tag images with the commit sha; `latest` is a convenience, never what you deploy |
+| Build once, deploy anywhere | CI builds; servers only pull. Small servers never compile |
+| Health checks + rollback | A deploy is done when the new version proves it's healthy, not when it starts |
+| Forced SSH commands | An SSH key can be limited to one exact action |
+| OOM score | Tell the kernel which containers to sacrifice first under memory pressure |
+| Docker DNS | Containers find each other by service name, across *every* network they're on |
+| Cache-Control | Hashed assets: cache forever; HTML: always revalidate |
+| Reusable workflows | `deploy.yml` calls `ci.yml`, so production runs exactly the PR checks |
+
+### Problems hit and how they were fixed
+
+**1. The free-hosting assumption was wrong.** The design said free hosts start Node "in about a second".
+Checking current docs showed Render's free tier sleeps after 15 minutes and takes 30–60 s to wake.
+*Lesson: verify platform limits when you decide, not from memory; they change.*
+
+**2. A shared network needs unique names: twice.**
+- *Caught before deploying:* ChaiHouse's Caddy routes to the DNS name `app`. A daily-loop service called
+  `app` on the same network would have split ChaiHouse's traffic. Named it `daily-loop-app`.
+- *Caught by the first deploy:* the deploy failed with **"password authentication failed for user
+  daily_loop"**. The password was fine. The app container is on two networks, and ChaiHouse's Postgres is
+  also called `db`, so `db` resolved to **ChaiHouse's database**, which rejected the login (no harm:
+  nothing was read or written, and Postgres doesn't lock accounts). Renamed to `daily-loop-db`.
+
+  The local simulation had missed it because its stand-in network was empty. A regression test now puts
+  a decoy Postgres aliased `db` on the shared network. It also showed *why* the bug is nasty: from a
+  container on both networks, `db` resolved to whichever network was attached in a particular order, so
+  the old setup worked locally but not on the server. *Lesson: a container on several networks sees
+  every name on all of them; prefix every service name on a shared network.*
+
+**3. The simulation clobbered the local dev database.** The production compose project is called
+`daily-loop`, and so (by folder name) was the dev stack; both had a service `db`, so Compose treated them
+as one and replaced the dev container. Data survived (different volume names). The dev stack is now
+`name: daily-loop-dev`, keeping its old volume via an explicit `name:`. *Lesson: name compose projects
+explicitly.*
+
+**4. The SSH gate had a newline bypass.** The first gate checked the sha with `grep -E '^[0-9a-f]{40}$'`.
+`grep` matches line by line, so `"<valid sha><newline>anything"` passed. The deploy script's own check
+(bash `=~`, whole string) would still have rejected it, but a gate must not rely on the next layer.
+Replaced with pure shell checks: no character outside `0-9a-f`, and length exactly 40. Then tested 12
+hostile inputs. *Lesson: validate whole strings, not lines.*
+
+**5. The server randomly dropped SSH connections.** `kex_exchange_identification: Connection reset`.
+24 connections were open, almost all internet bots, and sshd's default `MaxStartups 10:30:100` drops a
+growing share of new connections once more than 10 are unauthenticated. The workflow retries SSH on exit
+code 255 (connection errors). That's safe because redeploying the same sha changes nothing and the lock
+prevents overlap. *Lesson: retries need idempotent operations.*
+
+**6. Smaller ones.**
+- `@fastify/static` v10 passes a Fastify reply to `setHeaders` (`.header()`, not `.setHeader()`).
+- Fastify scopes the not-found handler to the plugin that sets it, so it's set on the root instance.
+- `/private/tmp` and `/Volumes` aren't shared into Colima's VM, so bind mounts there appeared empty; the
+  simulation moved to the home folder and actionlint read files via stdin.
+- Shellcheck: `A && B || C` isn't if/else; rewritten as `if`.
+- zsh doesn't word-split `$VAR`; test scripts with arrays run under bash.
+- The image is 277 MB, but ~177 MB of that is the official `node:22-alpine` base; the app adds ~35 MB.
+
+### How it was verified
+
+| Check | Result |
+|---|---|
+| Local Docker build | Non-root `node` user; no source, `.env` or dev tools; all runtime deps present |
+| Simulated droplet: first deploy / upgrade / broken release | Migrated + seeded / no-op migrations / **unhealthy → rolled back automatically**, exit 1 |
+| Simulated droplet with a decoy `db` (ChaiHouse) | Old compose: `db` resolves to the decoy; new compose: own database, decoy untouched |
+| SSH gate, 12 hostile inputs (`;`, `$(…)`, newline, length, uppercase…) | All rejected; only `deploy <40-hex>` allowed |
+| The real deploy key | Shell refused; other commands refused; port forwarding "administratively prohibited"; `deploy <sha>` reaches the script |
+| actionlint, shellcheck, prettier, lint, typecheck, 66 tests | All pass; **CI passed on GitHub** for PR #6 |
+| First automatic deploy | Checks ✅ image ✅ **deploy ❌**: the `db` name collision (problem 2) |
+| After the fix, on the server | Migrations + seed into its own DB; both containers healthy |
+| https://daily5.tradertrix.com | `/api/health` → `db: up`, version = commit; Let's Encrypt cert; HTTP → HTTPS; HSTS, nosniff, DENY |
+| Cookie in production | `HttpOnly; Secure; SameSite=Lax` |
+| Caching | JS bundle 83 KB gzipped, `max-age=31536000, immutable`; `index.html` `no-cache` |
+| Phone-sized browser on the live site | Card shown; answer → "Correct! +10 points" |
+| ChaiHouse during and after | All containers healthy; site 200 throughout |
+| Memory | daily-loop ~51 MB in total; 1.28 GB still available |
+
+### What's next
+
+Merge `fix/deploy-db-name`. That merge is the first **fully automatic** deploy (checks → image → SSH →
+health → public URL check). Then: chart cards (Yahoo Finance) and email login.
 
 ---
 
