@@ -13,7 +13,8 @@
     "db:migrate": "tsx src/scripts/migrate.ts",
     "db:seed": "tsx src/scripts/seed.ts",
     "db:reset": "tsx src/scripts/reset.ts",
-    "datasets:check": "tsx src/scripts/check-datasets.ts"
+    "datasets:check": "tsx src/scripts/check-datasets.ts",
+    "challenges:generate": "tsx src/scripts/generate.ts"
   },
   "dependencies": {
     "@daily-loop/shared": "^0.1.0",

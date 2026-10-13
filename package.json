@@ -25,7 +25,8 @@
     "db:seed": "npm run db:seed -w @daily-loop/api",
     "db:setup": "npm run db:migrate && npm run db:seed",
     "db:reset": "npm run db:reset -w @daily-loop/api",
-    "datasets:check": "npm run datasets:check -w @daily-loop/api"
+    "datasets:check": "npm run datasets:check -w @daily-loop/api",
+    "challenges:generate": "npm run challenges:generate -w @daily-loop/api"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

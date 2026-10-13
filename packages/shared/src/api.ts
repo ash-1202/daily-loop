@@ -45,6 +45,17 @@ export const cardResultSchema = z.object({
 });
 export type CardResult = z.infer<typeof cardResultSchema>;
 
+/**
+ * Candles for a "Read the chart" card: past daily prices of a stock whose name is hidden,
+ * rescaled so the first close is 100. Each candle is [open, high, low, close].
+ */
+export const chartSchema = z.object({
+  candles: z.array(z.tuple([z.number(), z.number(), z.number(), z.number()])),
+  /** Draw attention to the last candle (for "what kind of candle is this?" questions). */
+  highlightLast: z.boolean(),
+});
+export type Chart = z.infer<typeof chartSchema>;
+
 export const cardSchema = z.object({
   position: z.number(),
   taskId: z.string(),
@@ -52,6 +63,8 @@ export const cardSchema = z.object({
   prompt: z.string(),
   options: z.array(z.string()),
   icon: z.nullable(z.string()),
+  /** Only on chart cards. */
+  chart: z.nullable(chartSchema),
   /** null until answered. The correct answer is never sent before that. */
   result: z.nullable(cardResultSchema),
 });

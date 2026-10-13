@@ -1,5 +1,5 @@
 import type pg from 'pg';
-import { CARDS_PER_DAY, DAILY_MIX, type Card, type Progress } from '@daily-loop/shared';
+import { CARDS_PER_DAY, DAILY_MIX, type Card, type Chart, type Progress } from '@daily-loop/shared';
 import { lockKey, type Db } from '../lib/db-utils';
 import { seededShuffle } from '../lib/shuffle';
 
@@ -12,11 +12,16 @@ const SLOT_CANDIDATES: Record<TaskType, TaskType[]> = {
   chart: ['chart', 'term'],
 };
 
-/** The least recently used active card of a type, excluding cards already chosen for the day. */
-async function pickLeastRecentlyUsed(
+/**
+ * The card to use for a slot: the chart generated for this exact date if there is one
+ * (`chart_<date>`), otherwise the least recently used active card of the type (never-used first,
+ * ties random), excluding cards already chosen for the day.
+ */
+async function pickCard(
   client: pg.PoolClient,
   type: TaskType,
   exclude: string[],
+  date: string,
 ): Promise<string | undefined> {
   const { rows } = await client.query<{ id: string }>(
     `SELECT t.id
@@ -26,9 +31,9 @@ async function pickLeastRecentlyUsed(
        FROM daily_challenge_tasks d WHERE d.task_id = t.id
      ) u ON true
      WHERE t.type = $1 AND t.active AND NOT (t.id = ANY($2::text[]))
-     ORDER BY u.last_used NULLS FIRST, random()
+     ORDER BY (t.id = $3) DESC, u.last_used NULLS FIRST, random()
      LIMIT 1`,
-    [type, exclude],
+    [type, exclude, `chart_${date}`],
   );
   return rows[0]?.id;
 }
@@ -52,7 +57,7 @@ export async function ensureChallenge(client: pg.PoolClient, date: string): Prom
   for (const slotType of DAILY_MIX) {
     let taskId: string | undefined;
     for (const type of SLOT_CANDIDATES[slotType]) {
-      taskId = await pickLeastRecentlyUsed(client, type, chosen);
+      taskId = await pickCard(client, type, chosen, date);
       if (taskId) break;
     }
     if (!taskId) throw new Error(`Not enough active cards to build the challenge for ${date}`);
@@ -76,7 +81,7 @@ export interface CardRow {
   options: string[];
   answer: string;
   explanation: string;
-  payload: { icon?: string; red_flags?: string[] };
+  payload: { icon?: string; red_flags?: string[]; kind?: string; ohlc?: Chart['candles'] };
   submitted_answer: string | null;
   is_correct: boolean | null;
 }
@@ -136,6 +141,10 @@ export function toCard(row: CardRow, date: string): Card {
     prompt: row.prompt,
     options: displayOptions(row, date),
     icon: row.payload.icon ?? null,
+    // Only the candles: the stock name and dates in payload.meta stay on the server.
+    chart: row.payload.ohlc
+      ? { candles: row.payload.ohlc, highlightLast: row.payload.kind === 'last_candle' }
+      : null,
     result: answered
       ? {
           answer: row.submitted_answer!,
