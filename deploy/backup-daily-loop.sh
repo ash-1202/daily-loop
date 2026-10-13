@@ -13,8 +13,8 @@ mkdir -p "$BACKUPS"
 cd "$DIR"
 
 # Dump through the running container, so no Postgres tools are needed on the host.
-# IMAGE_TAG is required by the compose file but irrelevant for exec on the db service.
-if ! IMAGE_TAG=$(cat current_tag) docker compose -f docker-compose.prod.yml exec -T db \
+# IMAGE_TAG is required by the compose file but irrelevant for exec on the database service.
+if ! IMAGE_TAG=$(cat current_tag) docker compose -f docker-compose.prod.yml exec -T daily-loop-db \
       pg_dump -U daily_loop -d daily_loop --clean --if-exists \
    | gzip > "$OUT"; then
   echo "$(date -Is) BACKUP FAILED" >> "$DIR/backup.log"

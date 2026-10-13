@@ -33,8 +33,14 @@ Internet ─► ChaiHouse's Caddy (:80/:443, HTTPS) ─► daily-loop-app:3000 �
 - **Memory:** app ≤ 256 MB, db ≤ 200 MB, `oom_score_adj: 800` (ChaiHouse: 500), so under memory
   pressure the kernel stops daily-loop first.
 - **No public ports:** only ChaiHouse's Caddy listens on 80/443. The app is reachable from Caddy as
-  `daily-loop-app` (a unique name: a service called `app` would collide with ChaiHouse's `app` on
-  the shared network and split its traffic). Postgres is on daily-loop's private network only.
+  `daily-loop-app`. Postgres is on daily-loop's private network only.
+- **Unique service names** (`daily-loop-app`, `daily-loop-db`): the app is also on ChaiHouse's network,
+  and Docker DNS answers a name from every network a container is on. A service called `db` resolved
+  to ChaiHouse's Postgres on the first deploy; `app` would have split ChaiHouse's traffic. Never add a
+  service with a generic name to this file.
+- **Infrastructure files are copied by hand.** The pipeline deploys new *images*; changes to this
+  folder (compose file, scripts, Caddy block) are applied to the server manually, like a migration of
+  the server itself, and noted in the build log.
 - **Images:** the deploy keeps the 3 newest daily-loop images and removes older ones; ChaiHouse
   images are never touched.
 
@@ -105,5 +111,5 @@ previous version keeps working with the newer schema.
 
 ```bash
 gunzip -c backups/daily-loop-YYYYMMDD-HHMMSS.sql.gz \
-  | IMAGE_TAG=$(cat current_tag) docker compose -f docker-compose.prod.yml exec -T db psql -U daily_loop -d daily_loop
+  | IMAGE_TAG=$(cat current_tag) docker compose -f docker-compose.prod.yml exec -T daily-loop-db psql -U daily_loop -d daily_loop
 ```
