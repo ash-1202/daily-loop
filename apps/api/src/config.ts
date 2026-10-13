@@ -26,6 +26,13 @@ const envSchema = z.object({
   // The git commit this build came from (set at docker build time); shown by /api/health so a
   // deploy can confirm the new version is live.
   APP_VERSION: z.string().default('dev'),
+  // Email login (OTP). 'console' prints codes to the log (development); 'resend' sends real email;
+  // 'none' hides the feature. Default: console in development, none in production.
+  EMAIL_PROVIDER: z.enum(['console', 'resend', 'none']).optional(),
+  RESEND_API_KEY: z.string().min(10).optional(),
+  EMAIL_FROM: z.string().default('Market Daily 5 <no-reply@mail.tradertrix.com>'),
+  // Key for hashing OTP codes (HMAC), so a database leak doesn't expose usable codes.
+  OTP_SECRET: z.string().min(32).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -35,6 +42,23 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-const { API_PORT, PORT, ...rest } = parsed.data;
+const { API_PORT, PORT, EMAIL_PROVIDER, OTP_SECRET, ...rest } = parsed.data;
+const isProduction = rest.NODE_ENV === 'production';
+const emailProvider = EMAIL_PROVIDER ?? (isProduction ? 'none' : 'console');
 
-export const config = { ...rest, PORT: API_PORT ?? PORT ?? 3000 };
+if (emailProvider === 'resend' && !rest.RESEND_API_KEY) {
+  console.error('EMAIL_PROVIDER=resend needs RESEND_API_KEY.');
+  process.exit(1);
+}
+if (emailProvider !== 'none' && isProduction && !OTP_SECRET) {
+  console.error('Email login in production needs OTP_SECRET (32+ random characters).');
+  process.exit(1);
+}
+
+export const config = {
+  ...rest,
+  PORT: API_PORT ?? PORT ?? 3000,
+  EMAIL_PROVIDER: emailProvider,
+  // A fixed key is fine outside production: codes there are printed to the console anyway.
+  OTP_SECRET: OTP_SECRET ?? 'development-only-otp-secret-not-for-production',
+};

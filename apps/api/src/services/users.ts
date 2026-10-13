@@ -11,12 +11,20 @@ interface StreakRow {
 }
 
 export async function getUser(db: Db, userId: string): Promise<User> {
-  const { rows } = await db.query<{ id: string; display_name: string | null }>(
-    'SELECT id, display_name FROM users WHERE id = $1',
+  const { rows } = await db.query<{
+    id: string;
+    display_name: string | null;
+    email: string | null;
+  }>(
+    `SELECT u.id, u.display_name,
+            (SELECT i.value FROM identities i
+             WHERE i.user_id = u.id AND i.type = 'email' AND i.verified_at IS NOT NULL
+             LIMIT 1) AS email
+     FROM users u WHERE u.id = $1`,
     [userId],
   );
   const row = rows[0]!;
-  return { id: row.id, displayName: row.display_name };
+  return { id: row.id, displayName: row.display_name, email: row.email };
 }
 
 /** A user's total points: the sum of their ledger. */

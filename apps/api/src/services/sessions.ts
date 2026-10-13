@@ -68,13 +68,25 @@ export async function startSession(
     }
 
     if (currentUserId === userId) return { userId, isNew, sessionToken: null };
-
-    const sessionToken = randomToken();
-    const expiresAt = new Date(now.getTime() + SESSION_TTL_DAYS * 86_400_000);
-    await client.query(
-      'INSERT INTO sessions (user_id, token_hash, expires_at, created_at) VALUES ($1, $2, $3, $4)',
-      [userId, sha256(sessionToken), expiresAt, now],
-    );
-    return { userId, isNew, sessionToken };
+    return { userId, isNew, sessionToken: await createSession(client, userId, now) };
   });
+}
+
+/** Opens a session for a user and returns the cookie token (only its hash is stored). */
+export async function createSession(db: Db, userId: string, now: Date): Promise<string> {
+  const token = randomToken();
+  const expiresAt = new Date(now.getTime() + SESSION_TTL_DAYS * 86_400_000);
+  await db.query(
+    'INSERT INTO sessions (user_id, token_hash, expires_at, created_at) VALUES ($1, $2, $3, $4)',
+    [userId, sha256(token), expiresAt, now],
+  );
+  return token;
+}
+
+/** Ends the session behind a cookie token (no-op if it's unknown or already ended). */
+export async function revokeSession(db: Db, token: string, now: Date): Promise<void> {
+  await db.query(
+    'UPDATE sessions SET revoked_at = $2 WHERE token_hash = $1 AND revoked_at IS NULL',
+    [sha256(token), now],
+  );
 }

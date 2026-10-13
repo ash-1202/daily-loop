@@ -1,8 +1,10 @@
 import cookie from '@fastify/cookie';
-import Fastify, { type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type pg from 'pg';
 import { config } from './config';
+import type { EmailSender } from './email/sender';
 import { HttpError } from './lib/http-error';
+import { authRoutes } from './routes/auth';
 import { healthRoutes } from './routes/health';
 import { leaderboardRoutes } from './routes/leaderboard';
 import { meRoutes } from './routes/me';
@@ -10,7 +12,7 @@ import { sessionRoutes } from './routes/session';
 import { submissionRoutes } from './routes/submissions';
 import { todayRoutes } from './routes/today';
 import { setupWebAndNotFound } from './routes/web';
-import { userIdForSession } from './services/sessions';
+import { SESSION_TTL_DAYS, userIdForSession } from './services/sessions';
 
 /** What the app needs from the outside world. Tests pass a test database and a fake clock. */
 export interface AppDeps {
@@ -19,6 +21,8 @@ export interface AppDeps {
   clock: () => Date;
   /** Folder with the built web app to serve (production). Omitted in development and tests. */
   staticDir?: string;
+  /** Sends login codes. null = email login is switched off (the app hides it). */
+  email: EmailSender | null;
 }
 
 declare module 'fastify' {
@@ -32,6 +36,17 @@ declare module 'fastify' {
 }
 
 export const SESSION_COOKIE = 'dl_session';
+
+/** Sets the session cookie: httpOnly (unreadable by JavaScript), Secure in production, 180 days. */
+export function setSessionCookie(reply: FastifyReply, token: string) {
+  reply.setCookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: config.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: SESSION_TTL_DAYS * 86_400,
+  });
+}
 
 /** Returns the signed-in user's id, or throws 401. */
 export function requireUser(req: FastifyRequest): string {
@@ -60,6 +75,7 @@ export function buildApp(deps: AppDeps) {
   // One error format for every failure: { error: { code, message } }.
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof HttpError) {
+      if (err.status >= 500) req.log.error(err); // e.g. the email provider failed
       return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
     }
     const status = (err as { statusCode?: number }).statusCode;
@@ -81,6 +97,7 @@ export function buildApp(deps: AppDeps) {
   app.register(submissionRoutes);
   app.register(meRoutes);
   app.register(leaderboardRoutes);
+  app.register(authRoutes);
   setupWebAndNotFound(app, deps.staticDir);
 
   return app;

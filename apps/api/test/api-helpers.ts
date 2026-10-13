@@ -1,6 +1,7 @@
 import type pg from 'pg';
 import type { SubmitResponse, TodayResponse } from '@daily-loop/shared';
 import { buildApp } from '../src/app';
+import { MemoryEmailSender } from '../src/email/sender';
 
 /** Noon IST on Wednesday 14 Oct 2026. Tests move the clock from here. */
 export const WEDNESDAY_NOON_IST = new Date('2026-10-14T06:30:00Z');
@@ -8,14 +9,18 @@ export const WEDNESDAY_NOON_IST = new Date('2026-10-14T06:30:00Z');
 export type TestApp = ReturnType<typeof buildApp> & {
   /** Moves the fake clock. */
   setNow(date: Date): void;
+  /** Emails the app "sent" (login codes). */
+  emails: MemoryEmailSender;
 };
 
 export function createTestApp(pool: pg.Pool, start = WEDNESDAY_NOON_IST): TestApp {
   let now = start;
-  const app = buildApp({ pool, clock: () => now }) as TestApp;
+  const emails = new MemoryEmailSender();
+  const app = buildApp({ pool, clock: () => now, email: emails }) as TestApp;
   app.setNow = (date) => {
     now = date;
   };
+  app.emails = emails;
   return app;
 }
 

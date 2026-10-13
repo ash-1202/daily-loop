@@ -24,6 +24,8 @@ export type SessionRequest = z.infer<typeof sessionRequestSchema>;
 export const userSchema = z.object({
   id: z.string(),
   displayName: z.nullable(z.string()),
+  /** Verified email, or null for a guest who hasn't saved their progress. */
+  email: z.nullable(z.string()),
 });
 export type User = z.infer<typeof userSchema>;
 
@@ -143,6 +145,8 @@ export const meResponseSchema = z.object({
   points: z.number(),
   streak: streakSchema,
   badges: z.array(badgeSchema),
+  /** Server features the app may offer (e.g. email login is off until email sending is set up). */
+  features: z.object({ emailLogin: z.boolean() }),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
 
@@ -152,6 +156,26 @@ export const updateMeRequestSchema = z.object({
     .check(z.trim(), z.minLength(2), z.maxLength(20), z.regex(/^[\p{L}\p{N} _.-]+$/u)),
 });
 export type UpdateMeRequest = z.infer<typeof updateMeRequestSchema>;
+
+// ---------- Email login (OTP) ----------
+
+export const otpRequestSchema = z.object({
+  email: z.string().check(z.trim(), z.toLowerCase(), z.maxLength(254), z.email()),
+});
+export type OtpRequest = z.infer<typeof otpRequestSchema>;
+
+export const otpVerifySchema = z.object({
+  email: z.string().check(z.trim(), z.toLowerCase(), z.maxLength(254), z.email()),
+  code: z.string().check(z.trim(), z.regex(/^\d{6}$/)),
+});
+export type OtpVerify = z.infer<typeof otpVerifySchema>;
+
+export const otpVerifyResponseSchema = z.object({
+  user: userSchema,
+  /** True if this email already had an account: you are now signed in to it on this device. */
+  switchedAccount: z.boolean(),
+});
+export type OtpVerifyResponse = z.infer<typeof otpVerifyResponseSchema>;
 
 // ---------- Leaderboard ----------
 
