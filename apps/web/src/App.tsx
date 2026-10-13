@@ -1,47 +1,57 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { HealthResponse } from '@daily-loop/shared';
-import { api } from './api';
+import { useState } from 'react';
+import { TabBar, type Tab } from './components/TabBar';
+import { TopBar } from './components/TopBar';
+import { LeadersScreen } from './screens/LeadersScreen';
+import { MeScreen } from './screens/MeScreen';
+import { TodayScreen } from './screens/TodayScreen';
 import { strings } from './strings';
-
-type Status = { kind: 'checking' } | { kind: 'ok'; health: HealthResponse } | { kind: 'error' };
+import { useGame } from './useGame';
 
 export function App() {
-  const [status, setStatus] = useState<Status>({ kind: 'checking' });
+  const { state, answer, retry, reload, setDisplayName } = useGame();
+  const [tab, setTab] = useState<Tab>('today');
+  const { load, today, me } = state;
 
-  const load = useCallback(() => {
-    api
-      .health()
-      .then((health) => setStatus({ kind: 'ok', health }))
-      .catch(() => setStatus({ kind: 'error' }));
-  }, []);
-
-  useEffect(load, [load]);
-
-  const retry = () => {
-    setStatus({ kind: 'checking' });
-    load();
-  };
-
-  return (
-    <main className="screen">
-      <h1>{strings.appName}</h1>
-      <p className="tagline">{strings.tagline}</p>
-      <StatusBadge status={status} />
-      {status.kind === 'error' && (
-        <button type="button" onClick={retry}>
+  let body;
+  if (load.kind === 'loading') {
+    body = <p className="screen-body center">{strings.loading}</p>;
+  } else if (load.kind === 'error' || !today || !me) {
+    body = (
+      <div className="screen-body center">
+        <p>📶 {load.kind === 'error' && load.offline ? strings.offline : strings.serverError}</p>
+        <button type="button" className="primary" onClick={() => void reload()}>
           {strings.retry}
         </button>
-      )}
-    </main>
-  );
-}
+      </div>
+    );
+  } else if (tab === 'leaders') {
+    body = <LeadersScreen />;
+  } else if (tab === 'me') {
+    body = <MeScreen me={me} onSaveName={setDisplayName} />;
+  } else {
+    body = (
+      <TodayScreen
+        today={today}
+        me={me}
+        rewardsByTask={state.rewardsByTask}
+        newBadges={state.newBadges}
+        submitting={state.submitting}
+        submitFailed={state.submitFailed}
+        onAnswer={(taskId, option) => {
+          const card = today.cards.find((c) => c.taskId === taskId);
+          if (card) answer(card, option);
+        }}
+        onRetry={retry}
+        onShowLeaders={() => setTab('leaders')}
+      />
+    );
+  }
 
-function StatusBadge({ status }: { status: Status }) {
-  if (status.kind === 'checking') return <p className="badge">{strings.checking}</p>;
-  if (status.kind === 'error') return <p className="badge badge--bad">🔌 {strings.offline}</p>;
-  return status.health.db === 'up' ? (
-    <p className="badge badge--good">✅ {strings.connected}</p>
-  ) : (
-    <p className="badge badge--bad">⚠️ {strings.dbDown}</p>
+  return (
+    <div className="app">
+      <TopBar me={me} />
+      <main className="main">{body}</main>
+      {load.kind === 'ready' && <TabBar tab={tab} onChange={setTab} />}
+    </div>
   );
 }
