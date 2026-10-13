@@ -21,6 +21,7 @@ interface Props {
   onAnswer: (taskId: string, option: string) => void;
   onRetry: () => void;
   onShowLeaders: () => void;
+  onShowMe: () => void;
 }
 
 export function TodayScreen(props: Props) {
@@ -64,7 +65,7 @@ export function TodayScreen(props: Props) {
   );
 }
 
-function DoneScreen({ today, me, newBadges, onShowLeaders }: Props) {
+function DoneScreen({ today, me, newBadges, onShowLeaders, onShowMe }: Props) {
   const countdown = useCountdownToNextDay();
   const pointsToday = today.progress.correct * POINTS.correctAnswer + POINTS.dailyBonus;
 
@@ -103,6 +104,15 @@ function DoneScreen({ today, me, newBadges, onShowLeaders }: Props) {
         <br />
         {strings.comeBack}
       </p>
+      {me.features.emailLogin && !me.user.email && (
+        <div className="banner banner--warn">
+          <p>🔒 {strings.saveNudge}</p>
+          <button type="button" className="primary" onClick={onShowMe}>
+            {strings.saveNudgeButton}
+          </button>
+        </div>
+      )}
+
       <button type="button" className="secondary" onClick={onShowLeaders}>
         🏆 {strings.seeLeaderboard}
       </button>

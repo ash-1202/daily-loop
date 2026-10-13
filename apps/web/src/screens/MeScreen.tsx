@@ -1,13 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import { ApiError, type MeResponse } from '@daily-loop/shared';
+import { SaveProgress } from '../components/SaveProgress';
 import { strings } from '../strings';
 
 interface Props {
   me: MeResponse;
   onSaveName: (name: string) => Promise<void>;
+  onRequestCode: (email: string) => Promise<void>;
+  onVerifyCode: (email: string, code: string) => Promise<boolean>;
+  onLogout: () => Promise<void>;
 }
 
-export function MeScreen({ me, onSaveName }: Props) {
+export function MeScreen({ me, onSaveName, onRequestCode, onVerifyCode, onLogout }: Props) {
   const [name, setName] = useState(me.user.displayName ?? '');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'invalid' | 'failed'>('idle');
 
@@ -45,6 +49,13 @@ export function MeScreen({ me, onSaveName }: Props) {
         </div>
       </div>
       <p className="muted small">{strings.freezeHelp}</p>
+
+      <SaveProgress
+        me={me}
+        onRequestCode={onRequestCode}
+        onVerifyCode={onVerifyCode}
+        onLogout={onLogout}
+      />
 
       <form className="name-form" onSubmit={save}>
         <label htmlFor="display-name">{strings.yourName}</label>

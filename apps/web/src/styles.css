@@ -616,6 +616,41 @@ button:disabled {
 
 /* ---------- Me ---------- */
 
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.panel h3 {
+  margin: 0;
+}
+
+.banner--good {
+  background: var(--good-bg);
+  color: var(--good-text);
+}
+
+.link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+button.link {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--heading);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 .name-form {
   display: flex;
   flex-direction: column;

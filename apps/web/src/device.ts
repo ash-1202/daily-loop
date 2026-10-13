@@ -31,3 +31,13 @@ export function getDeviceToken(): string {
     return memoryToken;
   }
 }
+
+/** Forget this device's guest account (on log out), so the next visit starts as a new guest. */
+export function resetDeviceToken(): void {
+  memoryToken = null;
+  try {
+    localStorage.removeItem(DEVICE_KEY);
+  } catch {
+    // Storage unavailable: nothing was saved.
+  }
+}
