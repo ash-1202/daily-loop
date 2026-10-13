@@ -21,6 +21,7 @@ Each entry follows the same template (see the end of this file).
 - [Step 1: Monorepo setup](#step-1-monorepo-setup)
 - [Step 2: Database schema and datasets](#step-2-database-schema-and-datasets)
 - [Step 3: Challenge API](#step-3-challenge-api)
+- [Step 4: Game screens (web UI)](#step-4-game-screens-web-ui)
 
 ---
 
@@ -482,7 +483,7 @@ Step 3, `feature/challenge-api`: guest sessions, building a day's challenge, `GE
 
 ## Step 3: Challenge API
 
-**Date:** 2026-10-13 · **Branch:** `feature/challenge-api`
+**Date:** 2026-10-13 · **Branch:** `feature/challenge-api` · **PR:** [#4](https://github.com/ash-1202/daily-loop/pull/4)
 
 ### Goal
 
@@ -694,6 +695,157 @@ registering a type parser that returns `'YYYY-MM-DD'` strings (`lib/db-utils.ts`
 
 Step 4, `feature/challenge-generator`: the Yahoo Finance provider, rule-based chart cards, the
 `/internal/jobs/generate-challenges` endpoint and the GitHub Actions schedule.
+
+*(Changed: the game screens were built first, as step 4, so the app is playable on a phone sooner.
+The chart generator moves to step 5.)*
+
+---
+
+## Step 4: Game screens (web UI)
+
+**Date:** 2026-10-13 · **Branch:** `feature/web-ui`
+
+### Goal
+
+Turn the API into an app someone can play on a cheap Android phone: start as a guest, answer today's
+5 cards one at a time, learn why each answer is right, see points, streak and badges grow, and check
+the leaderboard. Keep it small, readable for people with limited English, and honest on bad networks.
+
+### What was built
+
+```
+apps/web/
+├── index.html                 # + link to the web manifest
+├── public/manifest.webmanifest# "Add to home screen": name, colours, icon
+└── src/
+    ├── App.tsx                # loading / error / tabs
+    ├── useGame.ts             # all game state and actions in one hook
+    ├── useCountdown.ts        # "Next challenge in 2h 1m" (to midnight IST)
+    ├── device.ts              # device token (localStorage + fallback), randomId()
+    ├── strings.ts             # every sentence the user sees
+    ├── styles.css             # mobile-first styles, light + dark
+    ├── components/
+    │   ├── TopBar.tsx         # 🔥 streak  ⭐ points
+    │   ├── TabBar.tsx         # 📝 Today  🏆 Leaders  👤 Me
+    │   ├── ProgressDots.tsx   # ● ● ◉ ○ ○
+    │   └── CardView.tsx       # a card, its options, and the result panel
+    └── screens/
+        ├── TodayScreen.tsx    # one card at a time; Done screen when all 5 are answered
+        ├── LeadersScreen.tsx  # weekly leaderboard
+        └── MeScreen.tsx       # stats, display name, badges
+```
+
+No new dependencies: React, the shared typed API client, and plain CSS.
+
+### Key files explained
+
+**`useGame.ts`: one hook owns the game**
+
+Screens don't call the API themselves (except the leaderboard, which is read-only). The hook:
+
+1. On start: `createSession({ deviceToken })` → then `today()` and `me()` in parallel.
+2. `answer(card, option)`: builds the request with a **new idempotency key** and sends it.
+3. On success: replaces that card with the server's version (now with its result), and updates
+   progress, points, streak and badges **from the response**. The app never adds points itself.
+4. On a network or server error: keeps the request as `pending` and shows **Try again**, which resends
+   the **same request with the same key**. If the first attempt actually reached the server, the retry is
+   answered as a replay and nothing is counted twice.
+5. On a "your view is out of date" error (`already_answered`, `challenge_closed`, …): reloads from the server.
+6. When the app comes back to the foreground on a new IST day, it reloads today's challenge.
+
+A `stateRef` gives event handlers the latest state without re-creating them on every render.
+
+**`TodayScreen.tsx`: which card to show**
+
+```ts
+const card = today.cards.find((c) => c.taskId === viewing) ?? firstUnanswered;
+```
+
+`viewing` is set when the user answers, so the answered card stays on screen with its result until they
+tap **Next** (which clears `viewing` and moves to the next unanswered card). No unanswered card left →
+the Done screen. Because the cards come from the server, reloading the page resumes at the right card.
+
+**`CardView.tsx`: showing the result**
+
+After answering, the right option turns green with ✓ and a wrong choice red with ✗: colour **and** a
+symbol, so it works for colour-blind users. The result panel shows ✅/❌, **+10 points** (from the
+server's reward list), the right answer if needed, **💡 Why?**, and for scams the 🚩 warning signs.
+Focus moves to the result heading, so screen readers announce it and the page scrolls to it.
+
+**Plain language (`strings.ts`)**
+
+Every sentence is in one file, written for readers whose first language isn't English: short sentences,
+common words ("Warning signs", not "Indicators"), icons next to key words (🔥 streak, ⭐ points,
+🚩 Scam, ✅ Safe). A future Hindi version means translating one file.
+
+**Sizes for small screens (`styles.css`)**
+
+18px base text, answer buttons at least 56px tall, full-width on a 375px screen, a fixed bottom tab bar
+that respects the phone's safe area, and light/dark colours from the same CSS variables.
+
+### Concepts to learn from this step
+
+| Concept | In one line |
+|---|---|
+| Server as the source of truth | The UI shows what the server says (points, streak, results) and never calculates rewards |
+| Custom hook | Put state + side effects in `useGame()`; screens become simple functions of state |
+| Optimistic vs confirmed UI | Here the UI waits for the server's answer (fast enough), so it never shows a reward it must take back |
+| Idempotent retry | Resend the same request with the same key after a network failure |
+| Accessible feedback | Colour + symbol, focus management, `role="alert"`/`role="status"` for messages |
+| Mobile-first CSS | Design for 375px first; larger screens just get a centred column |
+| Content in one place | All copy in `strings.ts`: easy to review, simplify and translate |
+| Web app manifest | Lets Android "Add to home screen" open the app full-screen with its own icon |
+
+### Problems hit and how they were fixed
+
+**1. Every API call from the browser returned 404, but `curl` to the API worked.**
+The page showed "Something went wrong", with `POST /api/session → 404`. Calling the API directly on port
+3000 worked. Through Vite (port 5173), `GET /api/today` without a session returned **200**, yet the API
+would say 401. So Vite wasn't proxying at all: it was serving `index.html` for every path. The Vite process
+had been started at 20:11, **before** `node_modules` was deleted and reinstalled in step 2, so its
+proxy code was loading from files that no longer existed. Restarting the dev server fixed it.
+*Lesson: after reinstalling `node_modules`, restart long-running dev servers. And when a proxied call
+fails, call the backend directly to tell which side is broken.*
+
+**2. Switching branches restarted the API with old code for a moment.**
+`git checkout main` (before `git pull`) briefly removed the step 3 files; `tsx watch` noticed and
+restarted on the old code, then again after the pull. Harmless, but it explains odd logs during branch switches.
+
+**3. The error text was hard to read in dark mode.**
+It reused `--bad-text`, which in dark mode is a pale pink meant for text on a red background. Added a
+separate `--error-text` colour for error text on the normal background.
+
+**4. Earned and locked badges looked too similar.**
+Only opacity told them apart. Earned badges now have a green outline, and locked ones show 🔒 plus "Locked:".
+
+**5. A choice made for testing on real phones.**
+`crypto.randomUUID()` only exists on HTTPS or localhost. Opening the dev server from a phone over Wi-Fi
+(`http://192.168.x.x:5173`) would break it, so IDs use `crypto.getRandomValues()`, which works everywhere.
+
+### How it was verified
+
+Played in the browser at phone size (375 × 812), in dark and light mode:
+
+| Check | Result |
+|---|---|
+| First visit | Guest created automatically; card 1 of 5 shown; 🔥 0 ⭐ 0 |
+| Wrong answer | Chosen option red ✗, right option green ✓, "❌ Not quite", right answer, "💡 Why?"; red dot |
+| Scam card | Message shown as a chat bubble, two big buttons 🚩 Scam / ✅ Safe |
+| Correct answer | "✅ Correct! +10 points"; ⭐ updates in the top bar; green dot |
+| Scam with warning signs | 🚩 chips: "Asks for OTP", "Pretends to be SEBI", "Creates panic" |
+| **Network failure** (first `fetch` to `/api/submissions` made to fail in the page) | "Your answer was not sent… Try again" → retry succeeds; **both attempts used the same idempotency key**; ⭐ 20 (counted once) |
+| Fifth card | "See today's result" → Done: 4 of 5 right, ⭐ 45, 🔥 1, **New badge: First Step**, countdown to midnight IST |
+| Leaders | Two players tied at 45 both shown 🥇; my row highlighted with "You" |
+| Me | Invalid name `<b>` rejected; "Asha" saved; stats, freeze 🧊 1, First Step earned, others 🔒 |
+| Reload the page | Same guest (cookie), Done screen restored from the server |
+| `npm run lint` / `typecheck` / `test` / `build` | All pass; **80.1 KB JS + 2.0 KB CSS** gzipped |
+
+Not tested in the browser: opening the app on a new IST day (the reload-on-visibility code). The
+day boundary itself is covered by the API tests.
+
+### What's next
+
+Step 5, `feature/challenge-generator`: Yahoo Finance chart cards, the pre-generation job and its schedule.
 
 ---
 

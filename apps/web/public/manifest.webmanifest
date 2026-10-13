@@ -1,0 +1,10 @@
+{
+  "name": "Market Daily 5",
+  "short_name": "Daily 5",
+  "description": "Learn about markets in one minute a day.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

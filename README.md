@@ -2,8 +2,8 @@
 
 A lightweight, mobile-first web app built around a short daily task with streaks, points and badges. Rewards are checked on the server and question sets are versioned and loaded into Postgres.
 
-> **Status:** in development. The game API (sessions, daily challenge, scoring, streaks, badges,
-> leaderboard) works and is tested; the game screens, chart cards and email login come next.
+> **Status:** in development. The game is playable end to end in the browser: guest start, 5 daily
+> cards, points, streaks, badges and a weekly leaderboard. Chart cards, email login and deployment come next.
 >
 > - **Why** things are built this way: [docs/brainstorm.md](docs/brainstorm.md) (decisions and reasoning)
 > - **How** the code was built, step by step: [docs/BUILD_LOG.md](docs/BUILD_LOG.md) (learning journal)
@@ -47,6 +47,25 @@ After each answer a short **"Why?"** explanation appears, so even a wrong answer
 **Guardrail: we reward learning, never market predictions.** Points come only from answering
 knowledge questions correctly. There is no betting on prices and no stock tips; chart cards use
 past data with the stock name hidden.
+
+---
+
+## The app
+
+Three tabs, one idea per screen, big buttons (56px+), icons next to words, works in light and dark mode.
+
+| Screen | What the user sees |
+|---|---|
+| **Today** | 🔥 streak and ⭐ points at the top, 5 progress dots, one card at a time. Tap an answer → ✅/❌, **+10 points**, the right answer, a short **"💡 Why?"** and, for scams, the 🚩 warning signs → **Next card** |
+| **Done** | "You got 4 of 5 right", points today, streak, any **new badge**, and a countdown to the next challenge (midnight IST) |
+| **Leaders** | This week's top 10 (🥇🥈🥉), your row highlighted, your rank |
+| **Me** | Points, streak, best streak, streak freeze 🧊, display name for the leaderboard, badges (earned or 🔒) |
+
+Built for patchy mobile data:
+- If an answer fails to send, the app says so and offers **Try again**. The retry reuses the same
+  idempotency key, so it can never be counted twice.
+- Opening the app on a new IST day loads the new challenge automatically.
+- The whole app is about **80 KB of JavaScript + 2 KB of CSS** (gzipped), with no UI libraries.
 
 ---
 
@@ -262,7 +281,13 @@ cards at once, or double-tapping, can never pay the daily bonus twice or skip it
 ```
 daily-loop/
 ├── apps/
-│   ├── web/          # frontend: React + Vite (screens only)
+│   ├── web/          # frontend: React + Vite
+│   │   └── src/
+│   │       ├── useGame.ts    # all game state + actions (session, answer, retry, reload)
+│   │       ├── screens/      # Today (cards + Done), Leaders, Me
+│   │       ├── components/   # TopBar, TabBar, ProgressDots, CardView (+ result)
+│   │       ├── strings.ts    # every user-facing sentence, in plain English
+│   │       └── device.ts     # device token + random IDs
 │   └── api/          # backend: Node.js + Fastify REST API
 │       ├── src/
 │       │   ├── app.ts        # builds the Fastify app (deps: pool + clock), auth hook, error format
@@ -309,8 +334,8 @@ npm run db:setup         # creates the tables and loads the datasets
 npm run dev              # starts the API (port 3000) and the web app (port 5173)
 ```
 
-Open **http://localhost:5173**. You should see **✅ Connected**, which means
-web app → API → database are all wired up.
+Open **http://localhost:5173** (use your browser's phone view, or open it on a phone on the same
+Wi-Fi via the Network URL Vite prints). You start as a guest and see today's first card.
 
 > Postgres runs on host port **5433** (not the default 5432) so it does not clash with a Postgres
 > already installed on your machine.
